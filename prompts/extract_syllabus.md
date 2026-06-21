@@ -1,6 +1,6 @@
-# Prompt: Extracción de sílabo universitario
+# Prompt: Extracción de sílabo universitario (Cramly)
 
-Este archivo documenta el prompt utilizado en `src/llm_extractor.py` para extraer información estructurada de sílabos universitarios latinoamericanos.
+Este archivo documenta el prompt utilizado por **Cramly** en `src/llm_extractor.py` para extraer información estructurada de sílabos universitarios latinoamericanos.
 
 ## Modelo utilizado
 

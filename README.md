@@ -1,6 +1,6 @@
-# 📅 Sílabo2Calendar
+# 🎓 Cramly
 
-> **Convierte sílabos universitarios en calendarios inteligentes usando IA.**
+> **Upload your syllabus. Know your grades, deadlines and critical weeks.**
 
 Suba sus sílabos en PDF y obtenga en minutos: tabla de evaluaciones, gráfico de carga académica por semana, semanas críticas y un archivo `.ics` listo para importar a Google Calendar.
 
@@ -16,7 +16,7 @@ Suba sus sílabos en PDF y obtenga en minutos: tabla de evaluaciones, gráfico d
 
 Los estudiantes reciben entre 4 y 7 sílabos al inicio del ciclo. Las fechas, pesos y evaluaciones están dispersas en PDFs largos. El resultado: entregas olvidadas, semanas saturadas y mala planificación.
 
-Sílabo2Calendar convierte ese PDF pasivo en un sistema vivo de planificación académica.
+Cramly convierte ese PDF pasivo en un sistema vivo de planificación académica.
 
 ---
 
@@ -56,11 +56,12 @@ Sílabo2Calendar convierte ese PDF pasivo en un sistema vivo de planificación a
 ## 📁 Estructura del repositorio
 
 ```
-silabo2calendar/
+cramly/
 ├── app.py                  # Aplicación principal Streamlit
 ├── requirements.txt
 ├── .env.example
 ├── README.md
+├── LICENSE
 ├── src/
 │   ├── pdf_extractor.py    # Extracción de texto de PDFs
 │   ├── llm_extractor.py    # Llamada a Claude API → JSON estructurado
@@ -72,9 +73,11 @@ silabo2calendar/
 ├── data/
 │   └── sample_syllabi/     # Sílabos de ejemplo para demo
 ├── docs/
-│   ├── pitch_deck.pdf
-│   ├── architecture.png
-│   └── screenshots/
+│   ├── research/
+│   │   └── interviews.md   # Entrevistas de validación
+│   ├── screenshots/
+│   ├── pitch_deck.pdf      # (pendiente)
+│   └── architecture.png    # (pendiente)
 └── tests/
     └── test_date_normalizer.py
 ```
@@ -86,8 +89,8 @@ silabo2calendar/
 ### 1. Clonar el repositorio
 
 ```bash
-git clone https://github.com/tu-usuario/silabo2calendar.git
-cd silabo2calendar
+git clone https://github.com/tu-usuario/cramly.git
+cd cramly
 ```
 
 ### 2. Instalar dependencias

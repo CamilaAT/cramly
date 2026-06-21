@@ -16,11 +16,11 @@ def generate_ics(df: pd.DataFrame) -> bytes:
     Solo incluye eventos que tienen fecha_iso válida.
     """
     cal = Calendar()
-    cal.add("prodid", "-//Sílabo2Calendar//UP//ES")
+    cal.add("prodid", "-//Cramly//UP//ES")
     cal.add("version", "2.0")
     cal.add("calscale", "GREGORIAN")
     cal.add("method", "PUBLISH")
-    cal.add("x-wr-calname", "Sílabo2Calendar — Evaluaciones")
+    cal.add("x-wr-calname", "Cramly — Evaluaciones")
     cal.add("x-wr-timezone", "America/Lima")
 
     for _, row in df.iterrows():
@@ -51,7 +51,7 @@ def generate_ics(df: pd.DataFrame) -> bytes:
         ]
         if description:
             desc_lines.append(f"Descripción: {description}")
-        desc_lines.append("Generado por Sílabo2Calendar")
+        desc_lines.append("Generado por Cramly")
 
         ev = Event()
         ev.add("summary", summary)

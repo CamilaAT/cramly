@@ -1,5 +1,5 @@
 """
-app.py — Sílabo2Calendar
+app.py — Cramly
 Aplicación principal en Streamlit.
 Convierte sílabos universitarios en PDF a calendarios inteligentes usando Claude AI.
 """
@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 load_dotenv()
 
 from src.calendar_exporter import generate_ics
+from src.date_normalizer import normalize_events
 from src.llm_extractor import extract_syllabus_data
 from src.pdf_extractor import extract_text_from_pdf
 from src.workload import calculate_workload_scores, get_critical_weeks_summary
@@ -28,8 +29,8 @@ from src.workload import calculate_workload_scores, get_critical_weeks_summary
 # Configuración de página
 # ─────────────────────────────────────
 st.set_page_config(
-    page_title="Sílabo2Calendar",
-    page_icon="📅",
+    page_title="Cramly",
+    page_icon="🎓",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -67,8 +68,12 @@ DEMO_DATA = [
              "date_iso": "2026-06-23", "week": 16, "weight_percent": 30,
              "description": "Pitch de 7 min + Q&A", "source_quote": "Presentaciones: Martes 23 y miércoles 24 de junio", "confidence": 0.98},
             {"title": "Control de Lectura 5", "event_type": "quiz",
-             "date_iso": "2026-05-19", "week": 10, "weight_percent": 5,
-             "description": "Control semanal", "source_quote": "Controles de lectura semanales", "confidence": 0.80},
+             "date_iso": None, "week": 11, "weight_percent": 5,
+             "description": "Control semanal (sin fecha exacta en el sílabo)",
+             "source_quote": "Controles de lectura semanales", "confidence": 0.70},
+            {"title": "Entrega Avance del Proyecto", "event_type": "project",
+             "date_iso": "2026-05-25", "week": 11, "weight_percent": 20,
+             "description": "Avance intermedio de la startup", "source_quote": "Avance del proyecto semana 11", "confidence": 0.92},
             {"title": "Tarea 3 – Agentes crewAI", "event_type": "assignment",
              "date_iso": "2026-06-01", "week": 12, "weight_percent": 8,
              "description": "Implementar agente con crewAI", "source_quote": "Tareas prácticas del curso", "confidence": 0.85},
@@ -118,6 +123,22 @@ def get_api_key() -> str:
         except Exception:
             pass
     return key
+
+
+def normalize_all_courses(course_data_list: list, cycle_start_str: str) -> list:
+    """
+    Aplica normalize_events() a los eventos de cada curso.
+    - Convierte date_text a ISO cuando el LLM no devolvió date_iso.
+    - Calcula fecha aproximada desde la semana cuando no hay fecha exacta.
+    - Marca date_approximate=True en las fechas estimadas.
+    Funciona igual para sílabos reales (salida del LLM) y para el modo demo.
+    """
+    normalized = []
+    for course in course_data_list:
+        c = dict(course)
+        c["events"] = normalize_events(course.get("events", []), cycle_start_str)
+        normalized.append(c)
+    return normalized
 
 
 def flatten_events(course_data_list: list) -> pd.DataFrame:
@@ -176,16 +197,16 @@ with st.sidebar:
         os.environ["ANTHROPIC_API_KEY"] = api_key_input
 
     st.divider()
-    st.markdown("**Sílabo2Calendar** usa Claude AI para extraer automáticamente evaluaciones, fechas y pesos de tus sílabos en PDF.")
+    st.markdown("**Cramly** usa Claude AI para extraer automáticamente evaluaciones, fechas y pesos de tus sílabos en PDF.")
     st.markdown("🛠 Stack: Claude API · pdfplumber · Streamlit · Python")
 
 
 # ─────────────────────────────────────
 # Header
 # ─────────────────────────────────────
-st.markdown('<div class="main-title">📅 Sílabo2Calendar</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">🎓 Cramly</div>', unsafe_allow_html=True)
 st.markdown(
-    '<div class="subtitle">Convierte tus sílabos universitarios en un calendario inteligente — impulsado por IA</div>',
+    '<div class="subtitle">Tu copiloto académico — sube tus sílabos, conoce tus fechas, notas y semanas críticas</div>',
     unsafe_allow_html=True,
 )
 st.markdown("")
@@ -256,6 +277,7 @@ with tab_upload:
                     progress_bar.progress((i + 1) / len(uploaded_files))
 
                 status.success("✅ ¡Procesamiento completado!")
+                results = normalize_all_courses(results, cycle_start.isoformat())
                 st.session_state.processed_data = results
                 st.session_state.events_df = flatten_events(results)
                 st.rerun()
@@ -267,8 +289,9 @@ with tab_demo:
         "para explorar todas las funciones sin necesidad de sílabos propios."
     )
     if st.button("▶️ Cargar datos de demo", type="primary", use_container_width=True):
-        st.session_state.processed_data = DEMO_DATA
-        st.session_state.events_df = flatten_events(DEMO_DATA)
+        demo = normalize_all_courses(DEMO_DATA, cycle_start.isoformat())
+        st.session_state.processed_data = demo
+        st.session_state.events_df = flatten_events(demo)
         st.rerun()
 
 
@@ -478,7 +501,7 @@ if st.session_state.events_df is not None:
                 st.download_button(
                     "⬇️ Descargar .ics",
                     data=ics_bytes,
-                    file_name="silabo2calendar.ics",
+                    file_name="cramly.ics",
                     mime="text/calendar",
                     use_container_width=True,
                 )
@@ -495,14 +518,14 @@ if st.session_state.events_df is not None:
             st.download_button(
                 "⬇️ Descargar CSV completo",
                 data=csv_full,
-                file_name="silabo2calendar_completo.csv",
+                file_name="cramly_completo.csv",
                 mime="text/csv",
                 use_container_width=True,
             )
 
         st.divider()
         st.markdown("#### 📋 Resumen en Markdown")
-        summary_md = f"# Resumen — Sílabo2Calendar\n\n"
+        summary_md = f"# Resumen — Cramly\n\n"
         summary_md += f"**Generado:** {datetime.now().strftime('%d/%m/%Y %H:%M')}  \n"
         summary_md += f"**Universidad:** {university}  \n"
         summary_md += f"**Ciclo:** {cycle_start} → {cycle_end}\n\n"
@@ -518,7 +541,7 @@ if st.session_state.events_df is not None:
         st.download_button(
             "⬇️ Descargar resumen (.md)",
             data=summary_md,
-            file_name="silabo2calendar_resumen.md",
+            file_name="cramly_resumen.md",
             mime="text/markdown",
             use_container_width=True,
         )
