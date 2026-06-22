@@ -115,11 +115,15 @@ DEMO_DATA = [
 # ─────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────
-def get_api_key() -> str:
+def configured_api_key() -> str:
+    """
+    Devuelve la API key del SERVIDOR: del entorno (.env en local) o de st.secrets
+    (en el deploy). Para uso interno — NUNCA se muestra en la UI para no exponerla.
+    """
     key = os.getenv("ANTHROPIC_API_KEY", "").strip()
     if not key:
         try:
-            key = st.secrets.get("ANTHROPIC_API_KEY", "")
+            key = (st.secrets.get("ANTHROPIC_API_KEY", "") or "").strip()
         except Exception:
             pass
     return key
@@ -195,14 +199,27 @@ with st.sidebar:
 
     st.divider()
 
-    api_key_input = st.text_input(
-        "🔑 API Key de Anthropic",
-        type="password",
-        value=get_api_key(),
-        help="Obtén tu key en console.anthropic.com. También puedes ponerla en un archivo .env",
-    )
+    _server_key = configured_api_key()
+    if _server_key:
+        # Hay key configurada (servidor): cárgala al entorno para el extractor,
+        # sin mostrarla. El campo queda vacío como override opcional.
+        os.environ["ANTHROPIC_API_KEY"] = _server_key
+        st.success("✅ API key configurada")
+        api_key_input = st.text_input(
+            "🔑 Usar otra API Key (opcional)",
+            type="password",
+            value="",
+            help="Ya hay una key configurada. Deja vacío para usarla, o pega otra para sobrescribir.",
+        )
+    else:
+        api_key_input = st.text_input(
+            "🔑 API Key de Anthropic",
+            type="password",
+            value="",
+            help="Pega tu key de console.anthropic.com. En local puedes ponerla en un archivo .env.",
+        )
     if api_key_input:
-        os.environ["ANTHROPIC_API_KEY"] = api_key_input
+        os.environ["ANTHROPIC_API_KEY"] = api_key_input.strip()
 
     st.divider()
     st.markdown("**Cramly** usa Claude AI para extraer automáticamente evaluaciones, fechas y pesos de tus sílabos en PDF.")
