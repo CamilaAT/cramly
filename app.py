@@ -141,6 +141,12 @@ def normalize_all_courses(course_data_list: list, cycle_start_str: str) -> list:
     return normalized
 
 
+EVENT_COLUMNS = [
+    "Curso", "Evaluación", "Tipo", "Fecha", "Semana", "Peso (%)",
+    "Descripción", "Confianza", "Aprox.", "Cita del sílabo",
+]
+
+
 def flatten_events(course_data_list: list) -> pd.DataFrame:
     """Convierte lista de cursos en DataFrame plano de eventos."""
     rows = []
@@ -159,7 +165,9 @@ def flatten_events(course_data_list: list) -> pd.DataFrame:
                 "Aprox.": event.get("date_approximate", False),
                 "Cita del sílabo": event.get("source_quote", ""),
             })
-    return pd.DataFrame(rows)
+    # Siempre devolver las columnas esperadas, incluso sin eventos,
+    # para que el dashboard no falle con KeyError cuando un sílabo no arroja evaluaciones.
+    return pd.DataFrame(rows, columns=EVENT_COLUMNS)
 
 
 # ─────────────────────────────────────
@@ -308,7 +316,16 @@ with tab_demo:
 # ─────────────────────────────────────
 # Resultados
 # ─────────────────────────────────────
-if st.session_state.events_df is not None:
+if st.session_state.events_df is not None and st.session_state.events_df.empty:
+    st.divider()
+    st.warning(
+        "😕 No se detectaron evaluaciones en los sílabos procesados. "
+        "Puede deberse a un PDF sin cronograma claro o a un error de extracción. "
+        "Revisa el mensaje de error de arriba (si lo hay), verifica tu API key, "
+        "o prueba el **🎯 Modo demo** para ver la app en acción."
+    )
+
+elif st.session_state.events_df is not None:
     df: pd.DataFrame = st.session_state.events_df
     data: list = st.session_state.processed_data
 
