@@ -4,3 +4,6 @@ __pycache__/
 .DS_Store
 *.egg-info/
 .pytest_cache/
+
+# Sílabos reales de prueba — NO subir (datos con nombres de docentes)
+data/sample_syllabi/*.pdf

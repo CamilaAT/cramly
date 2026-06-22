@@ -253,22 +253,32 @@ with tab_upload:
                 for i, (f, cname) in enumerate(zip(uploaded_files, course_names)):
                     base = i / len(uploaded_files)
 
-                    status.info(f"📄 Extrayendo texto de **{cname}**...")
-                    progress_bar.progress(base + 0.15 / len(uploaded_files))
+                    status.info(f"🤖 Analizando **{cname}** con Claude (lectura directa del PDF)...")
+                    progress_bar.progress(base + 0.4 / len(uploaded_files))
 
-                    text = extract_text_from_pdf(f)
+                    f.seek(0)
+                    pdf_bytes = f.read()
 
-                    if not text or len(text) < 80:
-                        st.warning(
-                            f"⚠️ Poco texto extraído de '{f.name}'. "
-                            "El PDF puede estar escaneado — usa un PDF con texto seleccionable para mejor resultado."
+                    if not pdf_bytes:
+                        st.warning(f"⚠️ No se pudo leer '{f.name}'. Se omite.")
+                        continue
+
+                    # Claude lee el PDF de forma nativa (preserva tablas de cronograma y notas).
+                    # Si el PDF fallara, hace fallback a texto extraído con pdfplumber.
+                    data = extract_syllabus_data(
+                        pdf_bytes=pdf_bytes,
+                        course_name=cname,
+                        cycle_start=cycle_start.isoformat(),
+                    )
+
+                    if data.get("error"):
+                        status.info(f"↩️ Reintentando **{cname}** con extracción de texto...")
+                        fallback_text = extract_text_from_pdf(f)
+                        data = extract_syllabus_data(
+                            text=fallback_text,
+                            course_name=cname,
+                            cycle_start=cycle_start.isoformat(),
                         )
-                        text = f"Sílabo del curso {cname}. Sin texto extraíble."
-
-                    status.info(f"🤖 Analizando **{cname}** con Claude AI...")
-                    progress_bar.progress(base + 0.5 / len(uploaded_files))
-
-                    data = extract_syllabus_data(text, cname, cycle_start.isoformat())
 
                     if data.get("error"):
                         st.error(f"⚠️ Error en {cname}: {data['error']}")
