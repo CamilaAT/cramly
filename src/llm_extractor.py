@@ -212,6 +212,86 @@ def extract_syllabus_data(
         return _error_response(course_name, f"Error inesperado: {str(e)}")
 
 
+REFINE_SYSTEM = (
+    "Eres un asistente que corrige y complementa la información ya extraída de un sílabo, "
+    "según las instrucciones del estudiante (datos que el profesor mencionó en clase: fechas "
+    "exactas, entregas que se movieron, evaluaciones nuevas, etc.). Devuelves SIEMPRE el JSON "
+    "completo y actualizado del curso, conservando intacto todo lo que la instrucción no menciona."
+)
+
+REFINE_PROMPT = """Información actual del curso (JSON ya extraído):
+{current_json}
+
+Instrucción del estudiante:
+\"\"\"{instruction}\"\"\"
+
+Aplica EXACTAMENTE lo que pide la instrucción y devuelve el JSON COMPLETO del curso actualizado:
+- Conserva intactos todos los datos que la instrucción NO menciona.
+- Si da o cambia la fecha de una evaluación, actualiza su date_iso a formato YYYY-MM-DD
+  (año del ciclo: {cycle_start}). Si menciona un día de la semana o un rango, calcula la fecha.
+- Si agrega una evaluación nueva, créala con todos sus campos (incluye weight_percent si se indica).
+- Si una evaluación deja de ser ambigua (ya tiene fecha), ELIMINA de warnings la advertencia
+  correspondiente a esa evaluación.
+- Mantén class_schedule y grading_policy salvo que la instrucción pida cambiarlos.
+"""
+
+
+def refine_course_data(course: dict, instruction: str, cycle_start: str = "2026-03-17") -> dict:
+    """
+    Aplica una corrección/complemento en lenguaje natural sobre un curso ya extraído.
+    Devuelve el curso actualizado (mismo schema) o un dict con 'error'.
+    """
+    api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+    if not api_key:
+        return {"error": "No se encontró ANTHROPIC_API_KEY en las variables de entorno."}
+    if not instruction or not instruction.strip():
+        return {"error": "Instrucción vacía."}
+
+    client = anthropic.Anthropic(api_key=api_key)
+
+    # Solo enviamos los campos del schema (evita ruido de campos derivados como date_approximate)
+    clean = {
+        "course_name": course.get("course_name"),
+        "professor": course.get("professor"),
+        "institution": course.get("institution"),
+        "grading_policy": course.get("grading_policy", []),
+        "events": [
+            {k: ev.get(k) for k in ("title", "event_type", "date_text", "date_iso", "week",
+                                    "weight_percent", "description", "source_quote", "confidence")}
+            for ev in course.get("events", [])
+        ],
+        "class_schedule": course.get("class_schedule"),
+        "warnings": course.get("warnings", []),
+    }
+
+    prompt = REFINE_PROMPT.format(
+        current_json=json.dumps(clean, ensure_ascii=False, indent=2),
+        instruction=instruction.strip(),
+        cycle_start=cycle_start,
+    )
+
+    try:
+        message = client.messages.create(
+            model=MODEL,
+            max_tokens=8000,
+            system=REFINE_SYSTEM,
+            messages=[{"role": "user", "content": prompt}],
+            output_config={"format": {"type": "json_schema", "schema": SYLLABUS_SCHEMA}},
+        )
+        raw = next(b.text for b in message.content if b.type == "text")
+        result = json.loads(raw)
+        result.setdefault("events", [])
+        result.setdefault("grading_policy", [])
+        result.setdefault("warnings", [])
+        return result
+    except anthropic.APIStatusError as e:
+        return {"error": f"Error de API Anthropic ({e.status_code}): {e.message}"}
+    except json.JSONDecodeError as e:
+        return {"error": f"La IA no devolvió JSON válido: {e}"}
+    except Exception as e:
+        return {"error": f"Error inesperado: {str(e)}"}
+
+
 def _error_response(course_name: str, message: str) -> dict:
     return {
         "course_name": course_name,

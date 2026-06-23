@@ -22,7 +22,7 @@ load_dotenv()
 
 from src.calendar_exporter import generate_ics
 from src.date_normalizer import normalize_events
-from src.llm_extractor import extract_syllabus_data
+from src.llm_extractor import extract_syllabus_data, refine_course_data
 from src.pdf_extractor import extract_text_from_pdf
 from src.workload import calculate_workload_scores, get_critical_weeks_summary
 
@@ -273,12 +273,13 @@ DEMO_DATA = [
              "weight_percent": 10, "description": "Temas 8-10", "source_quote": "", "confidence": 0.9},
             {"title": "Trabajo de Investigación", "event_type": "assignment", "date_iso": "2026-06-18", "week": 14,
              "weight_percent": 10, "description": "Entrega del paper", "source_quote": "", "confidence": 0.88},
-            {"title": "Práctica Calificada 4", "event_type": "quiz", "date_iso": "2026-06-25", "week": 15,
-             "weight_percent": 10, "description": "Temas 11-13", "source_quote": "", "confidence": 0.9},
+            {"title": "Práctica Calificada 4", "event_type": "quiz", "date_iso": None, "week": None,
+             "weight_percent": 10, "description": "Temas 11-13 (fecha por confirmar con el profesor)",
+             "source_quote": "", "confidence": 0.5},
             {"title": "Examen Final", "event_type": "exam", "date_iso": "2026-07-02", "week": 16,
              "weight_percent": 25, "description": "Semanas 9-15", "source_quote": "", "confidence": 0.95},
         ],
-        "warnings": [],
+        "warnings": ["La Práctica Calificada 4 no tiene fecha exacta en el sílabo — confírmala con el profesor."],
     },
 ]
 
@@ -739,6 +740,36 @@ elif st.session_state.events_df is not None:
             st.markdown(f"### {cname}")
             if prof:
                 st.caption(f"👨‍🏫 Docente: {prof}")
+
+            # ✏️ Corregir / complementar con IA (info que el profe dio en clase)
+            with st.expander("✏️ Corregir o complementar con IA", expanded=False):
+                st.caption(
+                    "Dile a Cramly cualquier dato que el profe mencionó en clase y no estaba en el sílabo. "
+                    "Ej: *\"La Práctica Calificada 4 es el jueves 25 de junio\"* o "
+                    "*\"El trabajo de investigación se movió al sábado 4 de julio\"*."
+                )
+                instruction = st.text_input(
+                    "Tu indicación", key=f"refine_input_{idx}",
+                    placeholder="La Práctica Calificada 4 es el jueves 25 de junio",
+                    label_visibility="collapsed",
+                )
+                if st.button("Aplicar con IA", key=f"refine_btn_{idx}"):
+                    if not os.getenv("ANTHROPIC_API_KEY"):
+                        st.error("❌ Agrega tu API key de Anthropic en el panel lateral.")
+                    elif not instruction.strip():
+                        st.warning("Escribe una indicación primero.")
+                    else:
+                        with st.spinner("Actualizando con IA..."):
+                            refined = refine_course_data(course, instruction, cycle_start.isoformat())
+                        if refined.get("error"):
+                            st.error(f"⚠️ {refined['error']}")
+                        else:
+                            pdata = st.session_state.processed_data
+                            pdata[idx] = normalize_all_courses([refined], cycle_start.isoformat())[0]
+                            st.session_state.processed_data = pdata
+                            st.session_state.events_df = flatten_events(pdata)
+                            st.success("✅ ¡Actualizado! Revisa el calendario y la tabla.")
+                            st.rerun()
 
             st.markdown("#### 🧮 Calculadora de nota final")
             render_grade_calculator(course, key_prefix=f"calc_{idx}")
