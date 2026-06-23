@@ -22,18 +22,20 @@ Cramly convierte ese PDF pasivo en un sistema vivo de planificación académica.
 
 ---
 
-## ✨ Features del MVP
+## ✨ Features
 
 | Feature | Descripción |
 |---|---|
-| 📤 Upload PDF | Hasta 5 sílabos por sesión |
-| 🤖 Extracción con IA | Claude AI extrae evaluaciones, pesos y fechas en JSON estructurado |
-| 📋 Tabla consolidada | Todas las evaluaciones de todos los cursos en una sola vista |
-| 📈 Carga académica | Gráfico de barras con score por semana y detección de semanas críticas |
-| 📅 Calendario | Vista cronológica de evaluaciones |
-| ⬇️ Export .ics | Archivo estándar para Google Calendar, Apple Calendar, Outlook |
-| ⬇️ Export CSV | Tabla completa descargable |
-| 🎯 Modo demo | Datos de ejemplo sin necesidad de sílabos propios |
+| 📤 Upload PDF (hasta 8) | Lectura **nativa** del PDF por Claude (incluye escaneados vía visión) |
+| 🔗 Multi-PDF por curso | Varios PDFs con el mismo nombre se combinan (sílabo base + complemento con fechas) |
+| 🤖 Extracción con IA | Claude extrae evaluaciones, pesos, fechas y horario en JSON estructurado (structured outputs) |
+| 🧭 Vista por curso | Una pestaña por curso, además de una vista general |
+| 🧮 Calculadora de notas | Ingresa tus notas (escala 0–20) y calcula la nota final por pesos (aprobado ≥ 10.5) |
+| 📈 Carga académica | Score por semana, detección de semanas críticas y detalle de qué evaluaciones la causan |
+| 📅 Calendario de mes | Vista tipo calendario con navegación por mes, evaluaciones y clases regulares |
+| ✏️ Corregir con IA | Chat por curso para complementar/corregir (fechas que el profe dio en clase, entregas movidas) |
+| 📆 Export .ics | Evaluaciones + clases regulares (con su hora) para Google/Apple Calendar y Outlook |
+| 🎯 Modo demo | Datos de ejemplo sin necesidad de sílabos propios ni API key |
 
 ---
 
@@ -42,7 +44,7 @@ Cramly convierte ese PDF pasivo en un sistema vivo de planificación académica.
 | Componente | Herramienta |
 |---|---|
 | Frontend / Demo | [Streamlit](https://streamlit.io) |
-| PDF Extraction | [pdfplumber](https://github.com/jsvine/pdfplumber) |
+| Lectura de PDF | Claude lee el PDF de forma nativa (document block) + [pdfplumber](https://github.com/jsvine/pdfplumber) como fallback |
 | IA / LLM | [Claude claude-sonnet-4-6 via Anthropic API](https://docs.anthropic.com) |
 | Visualización | [Plotly](https://plotly.com/python/) |
 | Calendario | [icalendar](https://pypi.org/project/icalendar/) |
@@ -167,10 +169,10 @@ La app abre en `http://localhost:8501`
 
 ## ⚠️ Limitaciones conocidas
 
-- PDFs escaneados (imágenes) tienen menor calidad de extracción. Se recomienda PDFs con texto seleccionable.
-- Fechas en formatos muy inusuales pueden quedar como `null` y aparecen en la sección "requiere revisión".
+- Fechas en formatos muy inusuales pueden quedar como `null` y aparecen en la sección "requiere revisión" (se pueden completar con el chat **✏️ Corregir con IA**).
 - Pesos que no suman 100% se muestran con advertencia (puede ser que el sílabo esté incompleto).
-- Máximo 5 sílabos por sesión en el MVP.
+- Los datos viven en la sesión (sin base de datos): al recargar se reinician.
+- Máximo 8 archivos por sesión.
 
 ---
 
@@ -178,11 +180,10 @@ La app abre en `http://localhost:8501`
 
 | Plazo | Hito |
 |---|---|
-| 1 mes | OCR fallback para PDFs escaneados (PaddleOCR) |
-| 1 mes | Edición manual de eventos en la tabla |
-| 3 meses | Integración directa con Google Calendar API |
+| 1 mes | Login y persistencia (guardar tus ciclos entre sesiones) |
+| 3 meses | Integración directa con Google Calendar API (sync, no solo .ics) |
 | 3 meses | Soporte para sílabos de Canvas/Blackboard |
-| 6 meses | App móvil + alertas por correo |
+| 6 meses | App móvil + alertas por correo/push |
 | 12 meses | Dashboard para universidades + API pública |
 
 ---
