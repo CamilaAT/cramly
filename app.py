@@ -3,6 +3,7 @@ app.py — Cramly
 Aplicación principal en Streamlit.
 Convierte sílabos universitarios en PDF a calendarios inteligentes usando Claude AI.
 """
+import calendar as pycal
 import io
 import json
 import os
@@ -73,6 +74,117 @@ TIPO_ES = {
 
 def tipo_es(value: str) -> str:
     return TIPO_ES.get(value, (value or "Otro").capitalize())
+
+
+# ─────────────────────────────────────
+# Helpers de visualización por curso
+# ─────────────────────────────────────
+COURSE_COLORS = ["#2563eb", "#dc2626", "#16a34a", "#9333ea", "#ea580c", "#0891b2", "#db2777", "#65a30d"]
+WEEKDAY_ES = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
+MONTH_ES = {1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio",
+            7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"}
+
+
+def course_color_map(courses: list) -> dict:
+    return {c: COURSE_COLORS[i % len(COURSE_COLORS)] for i, c in enumerate(courses)}
+
+
+def color_weight(val):
+    """Estilo de celda según el peso de la evaluación (para las tablas)."""
+    if pd.isna(val):
+        return ""
+    if val >= 25:
+        return "background-color:#fef2f2; color:#dc2626; font-weight:bold"
+    if val >= 15:
+        return "background-color:#fffbeb; color:#d97706"
+    return ""
+
+
+def _month_html(year: int, month: int, by_day: dict, color_by_course: dict) -> str:
+    """Genera el HTML de una grilla de mes con los eventos en cada día."""
+    head = "".join(
+        f"<th style='border:1px solid #e5e7eb;padding:6px;background:#f8fafc;"
+        f"font-size:11px;color:#475569;text-transform:uppercase;'>{d}</th>"
+        for d in WEEKDAY_ES
+    )
+    body = ""
+    for week in pycal.Calendar(firstweekday=0).monthdayscalendar(year, month):
+        cells = ""
+        for day in week:
+            if day == 0:
+                cells += "<td style='border:1px solid #f1f5f9;background:#fafafa;height:82px;'></td>"
+                continue
+            chips = ""
+            for ev in by_day.get(day, []):
+                color = color_by_course.get(ev["Curso"], "#64748b")
+                w = ev.get("Peso (%)")
+                wtxt = f" {int(w)}%" if pd.notna(w) and w else ""
+                aprox = "≈ " if ev.get("Aprox.") else ""
+                title = str(ev["Evaluación"])
+                label = (title[:22] + "…") if len(title) > 22 else title
+                tip = f"{ev['Curso']} — {title}{wtxt}"
+                chips += (
+                    f"<div title=\"{tip}\" style='background:{color};color:#fff;font-size:10px;"
+                    f"line-height:1.25;border-radius:4px;padding:1px 4px;margin:2px 0;overflow:hidden;"
+                    f"white-space:nowrap;text-overflow:ellipsis;'>{aprox}{label}{wtxt}</div>"
+                )
+            cells += (
+                "<td style='border:1px solid #f1f5f9;vertical-align:top;height:82px;padding:3px;'>"
+                f"<div style='font-size:11px;font-weight:bold;color:#334155;'>{day:02d}</div>{chips}</td>"
+            )
+        body += f"<tr>{cells}</tr>"
+    return (
+        f"<div style='margin:0.4rem 0 1rem;'>"
+        f"<div style='font-weight:800;font-size:1.05rem;text-transform:uppercase;margin-bottom:4px;'>"
+        f"{MONTH_ES[month]} {year}</div>"
+        f"<table style='width:100%;border-collapse:collapse;table-layout:fixed;'>"
+        f"<thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>"
+    )
+
+
+def render_month_calendar(df_dated: pd.DataFrame, color_by_course: dict):
+    """Renderiza una vista de calendario por mes (todos los meses con eventos)."""
+    if df_dated.empty:
+        st.info("No hay evaluaciones con fecha exacta para mostrar en el calendario.")
+        return
+    tmp = df_dated.copy()
+    tmp["_dt"] = pd.to_datetime(tmp["Fecha"])
+    for period in sorted(tmp["_dt"].dt.to_period("M").unique()):
+        year, month = period.year, period.month
+        sub = tmp[(tmp["_dt"].dt.year == year) & (tmp["_dt"].dt.month == month)]
+        by_day = {}
+        for _, r in sub.iterrows():
+            by_day.setdefault(r["_dt"].day, []).append(r)
+        st.markdown(_month_html(year, month, by_day, color_by_course), unsafe_allow_html=True)
+
+
+def render_grade_calculator(course: dict, key_prefix: str):
+    """Calculadora de nota final (escala 0–20) en base a los pesos del curso."""
+    gp = [g for g in course.get("grading_policy", []) if g.get("weight_percent")]
+    if not gp:
+        st.info("Este curso no tiene un sistema de pesos detectado para calcular la nota.")
+        return
+    st.caption("Ingresa la nota que esperas/obtuviste en cada componente (escala 0–20):")
+    total_w = 0.0
+    weighted = 0.0
+    for i, g in enumerate(gp):
+        w = float(g["weight_percent"])
+        total_w += w
+        nota = st.number_input(
+            f"{g['component']} — peso {w:g}%",
+            min_value=0.0, max_value=20.0, value=0.0, step=0.5,
+            key=f"{key_prefix}_grade_{i}",
+        )
+        weighted += nota * w / 100.0
+    st.markdown("")
+    c1, c2 = st.columns(2)
+    c1.metric("Nota final estimada", f"{weighted:.2f} / 20")
+    c2.metric("Estado (mínimo 11)", "✅ Aprobado" if weighted >= 11 else "❌ Desaprobado")
+    if round(total_w) != 100:
+        st.warning(
+            f"⚠️ Los pesos detectados suman {total_w:g}%, no 100%. "
+            "La nota se calcula con los pesos tal como aparecen en el sílabo."
+        )
 
 
 # ─────────────────────────────────────
@@ -423,45 +535,15 @@ elif st.session_state.events_df is not None:
 
     st.markdown("")
 
-    # ── Tabs de resultados ───────────
-    rt1, rt2, rt3 = st.tabs([
-        "📋 Evaluaciones",
-        "📈 Carga académica",
-        "📅 Calendario",
-    ])
+    # ── Tabs: General + una por curso ─
+    color_by_course = course_color_map(sorted(df["Curso"].unique().tolist()))
+    course_keys = [c.get("course_name") or "Curso desconocido" for c in data]
 
-    # ── Tab 1: Tabla ─────────────────
-    with rt1:
-        st.markdown("### Todas tus evaluaciones")
+    tab_objs = st.tabs(["📊 General"] + [f"📚 {n}" for n in course_keys])
 
-        courses_list = ["Todos"] + sorted(df["Curso"].unique().tolist())
-        selected = st.selectbox("Filtrar por curso", courses_list)
-
-        display = df.copy()
-        if selected != "Todos":
-            display = display[display["Curso"] == selected]
-
-        display["_sort"] = pd.to_datetime(display["Fecha"], errors="coerce")
-        display = display.sort_values("_sort", na_position="last").drop(columns=["_sort"])
-
-        cols_show = ["Curso", "Evaluación", "Tipo", "Fecha", "Semana", "Peso (%)", "Aprox.", "Descripción"]
-
-        def color_weight(val):
-            if pd.isna(val):
-                return ""
-            if val >= 25:
-                return "background-color:#fef2f2; color:#dc2626; font-weight:bold"
-            if val >= 15:
-                return "background-color:#fffbeb; color:#d97706"
-            return ""
-
-        styled = display[cols_show].style.map(color_weight, subset=["Peso (%)"])
-        st.dataframe(styled, use_container_width=True, height=420)
-
-    # ── Tab 2: Carga académica ────────
-    with rt2:
-        st.markdown("### Carga académica por semana")
-
+    # ===== Tab General =====
+    with tab_objs[0]:
+        st.markdown("## Carga académica por semana")
         if not workload_df.empty:
             color_map = {
                 "Alta carga 🔴": "#ef4444",
@@ -469,26 +551,20 @@ elif st.session_state.events_df is not None:
                 "Baja carga 🟢": "#22c55e",
             }
             fig = px.bar(
-                workload_df,
-                x="Semana",
-                y="Score",
-                color="Nivel",
+                workload_df, x="Semana", y="Score", color="Nivel",
                 color_discrete_map=color_map,
                 title="Score de carga académica por semana",
                 labels={"Score": "Score de carga", "Semana": "Semana del ciclo"},
                 text="Score",
             )
             fig.update_layout(
-                plot_bgcolor="rgba(0,0,0,0)",
-                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
                 font_family="Arial, sans-serif",
             )
-            # Mostrar TODAS las semanas en el eje X (sin saltarse números)
             fig.update_xaxes(dtick=1, tickmode="linear")
             fig.update_traces(textposition="outside")
             st.plotly_chart(fig, use_container_width=True)
 
-            # Detalle de carga por semana: qué evaluaciones la causan
             st.markdown("### 🔎 Detalle por semana")
             for _, wrow in workload_df.sort_values("Semana").iterrows():
                 semana = int(wrow["Semana"])
@@ -510,62 +586,68 @@ elif st.session_state.events_df is not None:
                 )
             st.caption(
                 "El **score de carga** combina el número de evaluaciones de la semana (×10) "
-                "más la suma de sus pesos. Mientras más evaluaciones pesadas caen en una misma "
-                "semana, más alta la carga. 🔴 Alta · 🟡 Media · 🟢 Baja."
+                "más la suma de sus pesos. 🔴 Alta · 🟡 Media · 🟢 Baja."
             )
         else:
             st.info("No hay suficientes datos de semanas para generar el gráfico de carga.")
 
-    # ── Tab 3: Calendario ─────────────
-    with rt3:
-        st.markdown("### 📅 Calendario de evaluaciones")
-
-        df_cal = df[df["Fecha"].notna()].copy()
-        df_cal["Fecha_dt"] = pd.to_datetime(df_cal["Fecha"])
-        df_cal = df_cal.sort_values("Fecha_dt")
-
-        if not df_cal.empty:
-            for _, row in df_cal.iterrows():
-                w = row.get("Peso (%)")
-                weight_badge = f"**{int(w)}%**" if pd.notna(w) and w else ""
-                if pd.notna(w) and w:
-                    icon = "🔴" if w >= 25 else "🟡" if w >= 15 else "🟢"
-                else:
-                    icon = "⚪"
-                approx_tag = " *(fecha aprox.)*" if row.get("Aprox.") else ""
-                st.markdown(
-                    f"**{row['Fecha']}** — {icon} {row['Evaluación']} {weight_badge}{approx_tag}  \n"
-                    f"📚 *{row['Curso']}* · `{row['Tipo']}`"
-                )
-                st.markdown("---")
-        else:
-            st.info("No se detectaron evaluaciones con fechas exactas.")
+        st.divider()
+        st.markdown("## 📅 Calendario del ciclo")
+        # Leyenda de colores por curso
+        legend = " &nbsp; ".join(
+            f"<span style='display:inline-block;width:11px;height:11px;border-radius:3px;"
+            f"background:{color};margin-right:4px;'></span>{cur}"
+            for cur, color in color_by_course.items()
+        )
+        st.markdown(f"<div style='font-size:12px;margin-bottom:6px;'>{legend}</div>", unsafe_allow_html=True)
+        render_month_calendar(df[df["Fecha"].notna()], color_by_course)
 
         no_date = df[df["Fecha"].isna()]
         if not no_date.empty:
-            with st.expander(f"⚠️ {len(no_date)} evaluación(es) sin fecha — revisar manualmente en el sílabo"):
+            with st.expander(f"⚠️ {len(no_date)} evaluación(es) sin fecha — revisar en el sílabo"):
                 st.dataframe(
                     no_date[["Curso", "Evaluación", "Tipo", "Semana", "Peso (%)", "Cita del sílabo"]],
                     use_container_width=True,
                 )
 
-        # Exportar a Google Calendar (.ics) — dentro del mismo tab de Calendario
         st.divider()
-        st.markdown("### 📆 Exportar a Google Calendar")
+        st.markdown("## 📆 Exportar a Google Calendar")
         df_ics = df[df["Fecha"].notna()].copy()
         if not df_ics.empty:
-            ics_bytes = generate_ics(df_ics)
             st.download_button(
-                "⬇️ Descargar .ics",
-                data=ics_bytes,
+                "⬇️ Descargar .ics (todos los cursos)",
+                data=generate_ics(df_ics),
                 file_name="cramly.ics",
                 mime="text/calendar",
                 use_container_width=True,
             )
             st.caption(
-                "Importa este archivo en Google Calendar: "
-                "Configuración → Importar y exportar → Importar. "
+                "Impórtalo en Google Calendar: Configuración → Importar y exportar → Importar. "
                 "(También funciona en Apple Calendar y Outlook.)"
             )
         else:
             st.info("No hay evaluaciones con fecha exacta para exportar todavía.")
+
+    # ===== Tabs por curso =====
+    for idx, course in enumerate(data):
+        cname = course.get("course_name") or "Curso desconocido"
+        with tab_objs[idx + 1]:
+            course_df = df[df["Curso"] == cname].copy()
+            prof = course.get("professor")
+            st.markdown(f"### {cname}")
+            if prof:
+                st.caption(f"👨‍🏫 Docente: {prof}")
+
+            st.markdown("#### 🧮 Calculadora de nota final")
+            render_grade_calculator(course, key_prefix=f"calc_{idx}")
+
+            st.divider()
+            st.markdown("#### 📋 Evaluaciones del curso")
+            disp = course_df.copy()
+            disp["_sort"] = pd.to_datetime(disp["Fecha"], errors="coerce")
+            disp = disp.sort_values("_sort", na_position="last").drop(columns=["_sort"])
+            cols_show = ["Evaluación", "Tipo", "Fecha", "Semana", "Peso (%)", "Aprox.", "Descripción"]
+            st.dataframe(
+                disp[cols_show].style.map(color_weight, subset=["Peso (%)"]),
+                use_container_width=True, height=360,
+            )
