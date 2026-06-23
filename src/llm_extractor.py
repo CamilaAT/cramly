@@ -132,10 +132,9 @@ REGLAS CRÍTICAS:
 11. HORARIO DE CLASES: si el sílabo indica un horario regular de clases, llena class_schedule.sessions
     con UNA entrada POR DÍA, cada una con su propia hora (los días pueden tener horas distintas).
     Usa el día EN ESPAÑOL en minúscula y las horas en formato HH:MM (24h). Ejemplos:
-    - "Martes y Jueves 17:30-19:30" → sessions: [{day:"martes",start_time:"17:30",end_time:"19:30"},
-      {day:"jueves",start_time:"17:30",end_time:"19:30"}]
-    - "Lunes 10:30-13:30 y Jueves 19:30-21:30" → sessions: [{day:"lunes",start_time:"10:30",
-      end_time:"13:30"},{day:"jueves",start_time:"19:30",end_time:"21:30"}]
+    - "Martes y Jueves 17:30-19:30" → una sesión para martes y otra para jueves, ambas de 17:30 a 19:30.
+    - "Lunes 10:30-13:30 y Jueves 19:30-21:30" → una sesión lunes de 10:30 a 13:30 y otra sesión jueves
+      de 19:30 a 21:30 (cada día puede tener su propia hora).
     Si no hay un horario regular claro, deja class_schedule en null.
 12. VARIOS DOCUMENTOS: si se adjunta más de un PDF, TODOS pertenecen al MISMO curso (ej: el
     sílabo base + un documento complementario con las fechas exactas de las evaluaciones).
