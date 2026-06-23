@@ -1,0 +1,226 @@
+% ============================================================
+%  Cramly — Pitch Deck (Beamer)
+%  Cómo usar en Overleaf:
+%   1. New Project -> Blank Project (o sube este .tex)
+%   2. Pega este contenido en main.tex
+%   3. Compilador: pdfLaTeX (Menu -> Settings -> Compiler)
+%   4. Recompila y exporta a PDF (docs/pitch_deck.pdf)
+% ============================================================
+\documentclass[aspectratio=169]{beamer}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish]{babel}
+\usepackage{xcolor}
+
+% ---- Tema y colores de marca (indigo Cramly) ----
+\usetheme{Madrid}
+\definecolor{cramlyIndigo}{HTML}{4F46E5}
+\definecolor{cramlyDark}{HTML}{1E293B}
+\definecolor{cramlyGray}{HTML}{64748B}
+
+\setbeamercolor{structure}{fg=cramlyIndigo}
+\setbeamercolor{frametitle}{bg=cramlyIndigo,fg=white}
+\setbeamercolor{title}{fg=cramlyIndigo}
+\setbeamercolor{itemize item}{fg=cramlyIndigo}
+\setbeamercolor{block title}{bg=cramlyIndigo,fg=white}
+\setbeamerfont{frametitle}{series=\bfseries}
+\setbeamertemplate{navigation symbols}{}
+
+\title{\textbf{Cramly}}
+\subtitle{Tu copiloto académico}
+\author{[Tu Nombre] — Solo Founder}
+\institute{Universidad del Pacífico · Data Science con Python}
+\date{Junio 2026}
+
+\begin{document}
+
+% ---------- Portada ----------
+\begin{frame}
+  \titlepage
+  \begin{center}
+    \small\textit{Upload your syllabus. Know your grades, deadlines and critical weeks.}\\
+    \vspace{0.3cm}
+    \textcolor{cramlyIndigo}{\textbf{cramly.streamlit.app}}
+  \end{center}
+\end{frame}
+
+% ---------- One-liner ----------
+\begin{frame}{One-liner}
+  \begin{center}
+    \Large
+    Cramly convierte tus sílabos en PDF en un\\
+    \textbf{sistema vivo de planificación académica}:\\[0.4cm]
+    \textcolor{cramlyIndigo}{fechas, pesos de notas y semanas críticas}\\ en minutos.
+  \end{center}
+\end{frame}
+
+% ---------- Founder ----------
+\begin{frame}{Founder \& Founder-Market Fit}
+  \begin{itemize}
+    \item Soy estudiante de la Universidad del Pacífico — \textbf{vivo el problema cada ciclo}.
+    \item Llevo 5–7 cursos por semestre, cada uno con su sílabo en PDF.
+    \item Conozco el dolor de primera mano: parciales olvidados, semanas saturadas, no saber cuánto necesito para aprobar.
+    \item Construí Cramly como la herramienta que yo necesitaba.
+  \end{itemize}
+\end{frame}
+
+% ---------- Problema ----------
+\begin{frame}{El problema}
+  Los universitarios reciben \textbf{5–7 sílabos en PDF} al inicio del ciclo. Las fechas, pesos y cronogramas están dispersos en tablas largas y documentos distintos.
+  \vspace{0.3cm}
+  \begin{itemize}
+    \item Se olvidan entregas y parciales (aunque estén en el sílabo).
+    \item No anticipan las semanas donde se juntan varias evaluaciones.
+    \item No recuerdan cuánto pesa cada cosa ni cuánto necesitan para aprobar.
+    \item Los cambios de fecha que el profe dice en clase se pierden.
+    \item El sílabo queda como un \textbf{PDF muerto} que nadie reabre.
+  \end{itemize}
+  \vspace{0.2cm}
+  \footnotesize\textit{Validado con 5 estudiantes de la UP (ver docs/research).}
+\end{frame}
+
+% ---------- Solución & Insight ----------
+\begin{frame}{Solución \& Insight}
+  \begin{block}{Insight}
+    El sílabo no debería leerse una vez. Debería convertirse \textbf{automáticamente} en un sistema vivo de planificación.
+  \end{block}
+  \vspace{0.2cm}
+  El estudiante sube sus sílabos y obtiene en minutos:
+  \begin{itemize}
+    \item Tabla consolidada de evaluaciones (fechas + pesos).
+    \item Gráfico de carga por semana y \textbf{semanas críticas}.
+    \item Calendario de mes con clases y evaluaciones.
+    \item Calculadora de nota final (escala 0–20).
+    \item Chat para complementar lo que el profe dice en clase.
+    \item Export a Google Calendar (.ics).
+  \end{itemize}
+\end{frame}
+
+% ---------- Demo ----------
+\begin{frame}{Producto — Demo en vivo}
+  \begin{center}
+    \Large \textcolor{cramlyIndigo}{\textbf{$\rightarrow$ DEMO EN VIVO}}\\[0.5cm]
+  \end{center}
+  \footnotesize (Plan B: video de respaldo en el README)
+  \vspace{0.3cm}
+  \begin{enumerate}
+    \item Subir 2 PDFs de un curso (sílabo + complemento con fechas) $\rightarrow$ se combinan.
+    \item Dashboard: evaluaciones, semana más cargada.
+    \item Calendario de mes + calculadora de notas.
+    \item Corregir una fecha con el chat de IA.
+    \item Exportar a Google Calendar.
+  \end{enumerate}
+\end{frame}
+
+% ---------- Arquitectura ----------
+\begin{frame}{Arquitectura}
+  \begin{center}
+    PDF(s) $\rightarrow$ \textbf{Claude (Sonnet 4.6)} lectura nativa + structured outputs\\[0.2cm]
+    $\rightarrow$ JSON (cursos, pesos, fechas, horario)\\[0.2cm]
+    $\rightarrow$ Normalización de fechas $\rightarrow$ Score de carga\\[0.2cm]
+    $\rightarrow$ Dashboard · Calendario · Calculadora · Export .ics
+  \end{center}
+  \vspace{0.3cm}
+  \footnotesize
+  \textbf{Herramientas del curso:} Document AI con Claude (Lectura 14) · structured outputs · Streamlit.\\
+  \textbf{Stack:} Python · Streamlit · Claude API · Plotly · icalendar.
+\end{frame}
+
+% ---------- Why now ----------
+\begin{frame}{Why now?}
+  \begin{itemize}
+    \item Los LLMs (Claude) ahora leen PDFs complejos con tablas \textbf{de forma nativa y confiable} — antes no era posible extraer cronogramas con esta precisión.
+    \item Los \textbf{structured outputs} hacen la extracción robusta y barata.
+    \item Estudiantes 100\% digitales, acostumbrados a apps de productividad.
+  \end{itemize}
+\end{frame}
+
+% ---------- Mercado ----------
+\begin{frame}{Mercado (estimaciones)}
+  \begin{itemize}
+    \item \textbf{TAM:} +30M estudiantes universitarios en LatAm.
+    \item \textbf{SAM:} estudiantes de universidades que entregan sílabos en PDF (Perú: \textasciitilde 1.5M).
+    \item \textbf{SOM (inicial):} universidades privadas top en Lima (\textasciitilde 50–80k estudiantes), empezando por la UP.
+  \end{itemize}
+  \vspace{0.3cm}
+  \footnotesize Cifras ilustrativas para dimensionar la oportunidad.
+\end{frame}
+
+% ---------- Competencia & Moat ----------
+\begin{frame}{Competencia \& Moat}
+  \begin{itemize}
+    \item \textbf{Hoy:} agenda a mano, Notion/Excel manual, recordatorios del REA, Google Calendar a mano.
+    \item Ninguno \textbf{parte del PDF del sílabo} ni entiende formatos variados.
+    \item \textbf{Moat:} extracción afinada para sílabos LatAm (formatos, fórmulas de notas, tablas), + datos de uso que mejoran el producto, + integración con flujo del estudiante.
+  \end{itemize}
+\end{frame}
+
+% ---------- Modelo de negocio ----------
+\begin{frame}{Modelo de negocio}
+  \textbf{B2C Freemium}
+  \begin{itemize}
+    \item \textbf{Gratis:} 2 sílabos por ciclo, tabla básica.
+    \item \textbf{Estudiante — S/ 9.90/ciclo:} hasta 8 sílabos, alertas, .ics, calculadora.
+    \item \textbf{Premium — S/ 19.90/ciclo:} múltiples ciclos, integraciones, análisis avanzado.
+  \end{itemize}
+  \vspace{0.2cm}
+  \textbf{Visión B2B:} licencia para universidades por estudiante activo.
+\end{frame}
+
+% ---------- Go-to-market ----------
+\begin{frame}{Go-to-market}
+  \begin{itemize}
+    \item Inicio: boca a boca en la UP (grupos de WhatsApp, REAs, centros de estudiantes).
+    \item Lanzamiento al inicio de ciclo (momento de máximo dolor).
+    \item Embajadores por facultad + contenido en redes (TikTok/IG estudiantil).
+    \item Luego: expansión a otras universidades privadas de Lima.
+  \end{itemize}
+\end{frame}
+
+% ---------- Tracción ----------
+\begin{frame}{Tracción / señales tempranas}
+  \begin{itemize}
+    \item MVP \textbf{funcional y desplegado}: cramly.streamlit.app
+    \item Probado con sílabos reales de la UP (Investigación Económica, Financial Economics).
+    \item Validación cualitativa con 5 estudiantes: el problema es real y frecuente.
+  \end{itemize}
+\end{frame}
+
+% ---------- Roadmap ----------
+\begin{frame}{Roadmap}
+  \begin{itemize}
+    \item \textbf{1 mes:} login + persistencia (guardar tus ciclos).
+    \item \textbf{3 meses:} sync directo con Google Calendar API; soporte Canvas/Blackboard.
+    \item \textbf{6 meses:} app móvil + alertas push.
+    \item \textbf{12 meses:} dashboard para universidades + API pública.
+  \end{itemize}
+\end{frame}
+
+% ---------- Riesgos ----------
+\begin{frame}{Riesgos \& mitigación}
+  \begin{itemize}
+    \item \textbf{Formatos de sílabo muy variados} $\rightarrow$ extracción nativa con LLM + chat de corrección.
+    \item \textbf{Costo de API} $\rightarrow$ modelo eficiente (Sonnet) + límites por plan.
+    \item \textbf{Estacionalidad} (uso por ciclo) $\rightarrow$ features de uso continuo + B2B.
+  \end{itemize}
+\end{frame}
+
+% ---------- The ask ----------
+\begin{frame}{The Ask}
+  \begin{center}
+    \Large
+    Cramly ya funciona y resuelve un dolor real.\\[0.4cm]
+    \textcolor{cramlyIndigo}{\textbf{Pruébalo: cramly.streamlit.app}}\\[0.6cm]
+    \normalsize Buscamos: primeros usuarios en la UP, feedback y\\ apoyo para escalar a más universidades.
+  \end{center}
+\end{frame}
+
+\begin{frame}
+  \begin{center}
+    \Huge \textcolor{cramlyIndigo}{\textbf{Gracias}}\\[0.4cm]
+    \normalsize ¿Preguntas?
+  \end{center}
+\end{frame}
+
+\end{document}
