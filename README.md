@@ -8,7 +8,9 @@ Suba sus sílabos en PDF y obtenga en minutos: tabla de evaluaciones, gráfico d
 
 ## 🚀 Demo
 
-🔗 **URL del demo:** _[agregar link de Streamlit Cloud aquí]_
+🔗 **URL del demo:** **[cramly.streamlit.app](https://cramly.streamlit.app)**
+
+> Pruébalo sin instalar nada: usa el **🎯 Modo demo** para ver todas las funciones, o sube tus propios sílabos en PDF en **📤 Subir mis sílabos**.
 
 ---
 
