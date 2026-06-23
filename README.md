@@ -10,6 +10,8 @@ Suba sus sílabos en PDF y obtenga en minutos: tabla de evaluaciones, gráfico d
 
 🔗 **URL del demo:** **[cramly.streamlit.app](https://cramly.streamlit.app)**
 
+🎥 **Video demo (2-3 min):** **[Ver en Google Drive](https://drive.google.com/file/d/1bZti0-wpwpu0AdCdUTm_ZDPefVTqiot-/view?usp=sharing)**
+
 > Pruébalo sin instalar nada: usa el **🎯 Modo demo** para ver todas las funciones, o sube tus propios sílabos en PDF en **📤 Subir mis sílabos**.
 
 ---
