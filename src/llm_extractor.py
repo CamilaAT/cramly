@@ -73,10 +73,20 @@ SYLLABUS_SCHEMA = {
                              "weight_percent", "description", "source_quote", "confidence"],
             },
         },
+        "class_schedule": {
+            "type": ["object", "null"],
+            "additionalProperties": False,
+            "properties": {
+                "days": {"type": "array", "items": {"type": "string"}},
+                "start_time": {"type": ["string", "null"]},
+                "end_time": {"type": ["string", "null"]},
+            },
+            "required": ["days", "start_time", "end_time"],
+        },
         "warnings": {"type": "array", "items": {"type": "string"}},
     },
     "required": ["course_name", "professor", "institution",
-                 "grading_policy", "events", "warnings"],
+                 "grading_policy", "events", "class_schedule", "warnings"],
 }
 
 EXTRACTION_PROMPT = """Extrae la información de evaluaciones del sílabo universitario adjunto.
@@ -109,6 +119,10 @@ REGLAS CRÍTICAS:
 8. source_quote: copia breve y literal del texto donde encontraste el dato (fecha o peso).
 9. confidence: 0.0 a 1.0 según tu certeza.
 10. En warnings anota fechas ambiguas, pesos que no suman 100%, o info que requiera revisión.
+11. HORARIO DE CLASES: si el sílabo indica un horario regular de clases (ej: "Horario: Martes
+    y Jueves, 17:30 - 19:30 hs"), llena class_schedule con los días EN ESPAÑOL en minúscula
+    (ej: ["martes","jueves"]) y las horas en formato HH:MM (start_time, end_time). Si no hay
+    un horario regular claro, deja class_schedule en null.
 """
 
 

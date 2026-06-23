@@ -8,7 +8,7 @@ import io
 import json
 import os
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import pandas as pd
 import plotly.express as px
@@ -62,13 +62,21 @@ st.markdown("""
 # ─────────────────────────────────────
 TIPO_ES = {
     "exam": "Examen",
-    "assignment": "Trabajo / Entrega",
+    "assignment": "Tarea",
     "presentation": "Exposición",
-    "quiz": "Control / Quiz",
+    "quiz": "Práctica calificada",
     "project": "Proyecto",
     "reading": "Lectura",
     "other": "Otro",
     "class": "Clase",
+}
+
+# Días de la semana → índice (lunes=0) para generar el horario de clases
+DIA_A_WEEKDAY = {
+    "lunes": 0, "martes": 1, "miércoles": 2, "miercoles": 2, "jueves": 3,
+    "viernes": 4, "sábado": 5, "sabado": 5, "domingo": 6,
+    "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
+    "friday": 4, "saturday": 5, "sunday": 6,
 }
 
 
@@ -100,8 +108,8 @@ def color_weight(val):
     return ""
 
 
-def _month_html(year: int, month: int, by_day: dict, color_by_course: dict) -> str:
-    """Genera el HTML de una grilla de mes con los eventos en cada día."""
+def _month_html(year: int, month: int, evals_by_day: dict, classes_by_day: dict, color_by_course: dict) -> str:
+    """Genera el HTML de UNA grilla de mes con clases (gris) y evaluaciones (color)."""
     head = "".join(
         f"<th style='border:1px solid #e5e7eb;padding:6px;background:#f8fafc;"
         f"font-size:11px;color:#475569;text-transform:uppercase;'>{d}</th>"
@@ -112,16 +120,27 @@ def _month_html(year: int, month: int, by_day: dict, color_by_course: dict) -> s
         cells = ""
         for day in week:
             if day == 0:
-                cells += "<td style='border:1px solid #f1f5f9;background:#fafafa;height:82px;'></td>"
+                cells += "<td style='border:1px solid #f1f5f9;background:#fafafa;height:90px;'></td>"
                 continue
             chips = ""
-            for ev in by_day.get(day, []):
+            # Clases regulares (chip gris con borde del color del curso)
+            for cl in classes_by_day.get(day, []):
+                color = color_by_course.get(cl["Curso"], "#94a3b8")
+                hora = cl.get("Hora", "")
+                tip = f"{cl['Curso']} — Clase {hora}".strip()
+                chips += (
+                    f"<div title=\"{tip}\" style='background:#eef2f7;color:#475569;border-left:3px solid {color};"
+                    f"font-size:9px;line-height:1.2;border-radius:3px;padding:1px 4px;margin:2px 0;overflow:hidden;"
+                    f"white-space:nowrap;text-overflow:ellipsis;'>Clase</div>"
+                )
+            # Evaluaciones (chip sólido con el color del curso)
+            for ev in evals_by_day.get(day, []):
                 color = color_by_course.get(ev["Curso"], "#64748b")
                 w = ev.get("Peso (%)")
                 wtxt = f" {int(w)}%" if pd.notna(w) and w else ""
                 aprox = "≈ " if ev.get("Aprox.") else ""
                 title = str(ev["Evaluación"])
-                label = (title[:22] + "…") if len(title) > 22 else title
+                label = (title[:20] + "…") if len(title) > 20 else title
                 tip = f"{ev['Curso']} — {title}{wtxt}"
                 chips += (
                     f"<div title=\"{tip}\" style='background:{color};color:#fff;font-size:10px;"
@@ -129,33 +148,39 @@ def _month_html(year: int, month: int, by_day: dict, color_by_course: dict) -> s
                     f"white-space:nowrap;text-overflow:ellipsis;'>{aprox}{label}{wtxt}</div>"
                 )
             cells += (
-                "<td style='border:1px solid #f1f5f9;vertical-align:top;height:82px;padding:3px;'>"
+                "<td style='border:1px solid #f1f5f9;vertical-align:top;height:90px;padding:3px;'>"
                 f"<div style='font-size:11px;font-weight:bold;color:#334155;'>{day:02d}</div>{chips}</td>"
             )
         body += f"<tr>{cells}</tr>"
     return (
-        f"<div style='margin:0.4rem 0 1rem;'>"
-        f"<div style='font-weight:800;font-size:1.05rem;text-transform:uppercase;margin-bottom:4px;'>"
-        f"{MONTH_ES[month]} {year}</div>"
         f"<table style='width:100%;border-collapse:collapse;table-layout:fixed;'>"
-        f"<thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>"
+        f"<thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
     )
 
 
-def render_month_calendar(df_dated: pd.DataFrame, color_by_course: dict):
-    """Renderiza una vista de calendario por mes (todos los meses con eventos)."""
-    if df_dated.empty:
-        st.info("No hay evaluaciones con fecha exacta para mostrar en el calendario.")
-        return
-    tmp = df_dated.copy()
-    tmp["_dt"] = pd.to_datetime(tmp["Fecha"])
-    for period in sorted(tmp["_dt"].dt.to_period("M").unique()):
-        year, month = period.year, period.month
-        sub = tmp[(tmp["_dt"].dt.year == year) & (tmp["_dt"].dt.month == month)]
-        by_day = {}
-        for _, r in sub.iterrows():
-            by_day.setdefault(r["_dt"].day, []).append(r)
-        st.markdown(_month_html(year, month, by_day, color_by_course), unsafe_allow_html=True)
+def generate_class_events(course: dict, cycle_start_str: str, cycle_end_str: str) -> list:
+    """Genera las clases semanales (eventos 'Clase') del curso entre inicio y fin del ciclo."""
+    sched = course.get("class_schedule") or {}
+    days = sched.get("days") or []
+    weekdays = {DIA_A_WEEKDAY[d.lower().strip()] for d in days if d.lower().strip() in DIA_A_WEEKDAY}
+    if not weekdays:
+        return []
+    try:
+        start = datetime.strptime(cycle_start_str, "%Y-%m-%d").date()
+        end = datetime.strptime(cycle_end_str, "%Y-%m-%d").date()
+    except Exception:
+        return []
+    hora = ""
+    if sched.get("start_time") or sched.get("end_time"):
+        hora = f"{sched.get('start_time', '')}-{sched.get('end_time', '')}".strip("-")
+    cname = course.get("course_name") or "Curso desconocido"
+    out = []
+    d = start
+    while d <= end:
+        if d.weekday() in weekdays:
+            out.append({"Curso": cname, "Fecha": d.isoformat(), "Hora": hora})
+        d += timedelta(days=1)
+    return out
 
 
 def render_grade_calculator(course: dict, key_prefix: str):
@@ -179,7 +204,7 @@ def render_grade_calculator(course: dict, key_prefix: str):
     st.markdown("")
     c1, c2 = st.columns(2)
     c1.metric("Nota final estimada", f"{weighted:.2f} / 20")
-    c2.metric("Estado (mínimo 11)", "✅ Aprobado" if weighted >= 11 else "❌ Desaprobado")
+    c2.metric("Estado (aprobado ≥ 10.5)", "✅ Aprobado" if weighted >= 10.5 else "❌ Desaprobado")
     if round(total_w) != 100:
         st.warning(
             f"⚠️ Los pesos detectados suman {total_w:g}%, no 100%. "
@@ -195,57 +220,65 @@ DEMO_DATA = [
         "course_name": "Data Science con Python",
         "professor": "Alexander Quispe",
         "institution": "Universidad del Pacífico",
+        "class_schedule": {"days": ["lunes", "miércoles"], "start_time": "19:00", "end_time": "21:00"},
         "grading_policy": [
+            {"component": "Tarea 1", "weight_percent": 10, "description": "Pandas y limpieza de datos"},
+            {"component": "Tarea 2", "weight_percent": 10, "description": "Visualización"},
+            {"component": "Tarea 3", "weight_percent": 10, "description": "APIs y scraping"},
+            {"component": "Tarea 4", "weight_percent": 10, "description": "Modelos de ML"},
+            {"component": "Tarea 5", "weight_percent": 10, "description": "LLMs y agentes"},
             {"component": "Proyecto Final", "weight_percent": 30, "description": "Startup funcional con demo y pitch"},
-            {"component": "Controles de lectura", "weight_percent": 25, "description": "Controles semanales"},
-            {"component": "Tareas", "weight_percent": 25, "description": "Tareas prácticas"},
             {"component": "Participación", "weight_percent": 20, "description": "Participación en clase"},
         ],
         "events": [
-            {"title": "Presentación Final – Startup", "event_type": "presentation",
-             "date_iso": "2026-06-23", "week": 16, "weight_percent": 30,
-             "description": "Pitch de 7 min + Q&A", "source_quote": "Presentaciones: Martes 23 y miércoles 24 de junio", "confidence": 0.98},
-            {"title": "Control de Lectura 5", "event_type": "quiz",
-             "date_iso": None, "week": 11, "weight_percent": 5,
-             "description": "Control semanal (sin fecha exacta en el sílabo)",
-             "source_quote": "Controles de lectura semanales", "confidence": 0.70},
-            {"title": "Entrega Avance del Proyecto", "event_type": "project",
-             "date_iso": "2026-05-25", "week": 11, "weight_percent": 20,
-             "description": "Avance intermedio de la startup", "source_quote": "Avance del proyecto semana 11", "confidence": 0.92},
-            {"title": "Tarea 3 – Agentes crewAI", "event_type": "assignment",
-             "date_iso": "2026-06-01", "week": 12, "weight_percent": 8,
-             "description": "Implementar agente con crewAI", "source_quote": "Tareas prácticas del curso", "confidence": 0.85},
+            {"title": "Tarea 1", "event_type": "assignment", "date_iso": "2026-04-01", "week": 3,
+             "weight_percent": 10, "description": "Pandas y limpieza de datos", "source_quote": "", "confidence": 0.9},
+            {"title": "Tarea 2", "event_type": "assignment", "date_iso": "2026-04-15", "week": 5,
+             "weight_percent": 10, "description": "Visualización", "source_quote": "", "confidence": 0.9},
+            {"title": "Tarea 3", "event_type": "assignment", "date_iso": "2026-04-29", "week": 7,
+             "weight_percent": 10, "description": "APIs y scraping", "source_quote": "", "confidence": 0.9},
+            {"title": "Tarea 4", "event_type": "assignment", "date_iso": "2026-05-20", "week": 10,
+             "weight_percent": 10, "description": "Modelos de ML", "source_quote": "", "confidence": 0.9},
+            {"title": "Tarea 5", "event_type": "assignment", "date_iso": "2026-06-10", "week": 13,
+             "weight_percent": 10, "description": "LLMs y agentes", "source_quote": "", "confidence": 0.9},
+            {"title": "Proyecto Final", "event_type": "project", "date_iso": "2026-07-01", "week": 16,
+             "weight_percent": 30, "description": "Startup funcional + pitch", "source_quote": "", "confidence": 0.95},
+            {"title": "Participación", "event_type": "other", "date_iso": None, "week": None,
+             "weight_percent": 20, "description": "Continua durante el ciclo", "source_quote": "", "confidence": 0.8},
         ],
         "warnings": [],
     },
     {
-        "course_name": "Econometría II",
-        "professor": "Carlos Mendoza",
+        "course_name": "Organización Industrial",
+        "professor": "Julio Aguirre",
         "institution": "Universidad del Pacífico",
+        "class_schedule": {"days": ["martes", "jueves"], "start_time": "17:30", "end_time": "19:30"},
         "grading_policy": [
-            {"component": "Examen Parcial", "weight_percent": 30, "description": ""},
-            {"component": "Examen Final", "weight_percent": 35, "description": ""},
-            {"component": "Prácticas Calificadas", "weight_percent": 25, "description": "3 prácticas"},
-            {"component": "Trabajo de Investigación", "weight_percent": 10, "description": ""},
+            {"component": "Examen Parcial", "weight_percent": 25, "description": "Semanas 1-7"},
+            {"component": "Examen Final", "weight_percent": 25, "description": "Semanas 9-15"},
+            {"component": "Práctica Calificada 1", "weight_percent": 10, "description": ""},
+            {"component": "Práctica Calificada 2", "weight_percent": 10, "description": ""},
+            {"component": "Práctica Calificada 3", "weight_percent": 10, "description": ""},
+            {"component": "Práctica Calificada 4", "weight_percent": 10, "description": ""},
+            {"component": "Trabajo de Investigación", "weight_percent": 10, "description": "Pesa como una práctica más"},
         ],
         "events": [
-            {"title": "Práctica Calificada 1", "event_type": "exam",
-             "date_iso": "2026-04-28", "week": 5, "weight_percent": 8,
-             "description": "Temas 1-3", "source_quote": "PC1 semana 5", "confidence": 0.90},
-            {"title": "Examen Parcial", "event_type": "exam",
-             "date_iso": "2026-05-26", "week": 11, "weight_percent": 30,
-             "description": "Temas semanas 1-10", "source_quote": "Parcial semana 11", "confidence": 0.95},
-            {"title": "Práctica Calificada 2", "event_type": "exam",
-             "date_iso": "2026-06-09", "week": 13, "weight_percent": 8,
-             "description": "Temas 4-7", "source_quote": "PC2 semana 13", "confidence": 0.90},
-            {"title": "Trabajo de Investigación", "event_type": "assignment",
-             "date_iso": "2026-06-16", "week": 14, "weight_percent": 10,
-             "description": "Entrega del paper", "source_quote": "Entrega semana 14", "confidence": 0.88},
-            {"title": "Examen Final", "event_type": "exam",
-             "date_iso": "2026-06-30", "week": 17, "weight_percent": 35,
-             "description": "Temas semanas 11-16", "source_quote": "Final semana 17", "confidence": 0.95},
+            {"title": "Práctica Calificada 1", "event_type": "quiz", "date_iso": "2026-04-09", "week": 4,
+             "weight_percent": 10, "description": "Temas 1-3", "source_quote": "", "confidence": 0.9},
+            {"title": "Práctica Calificada 2", "event_type": "quiz", "date_iso": "2026-04-30", "week": 7,
+             "weight_percent": 10, "description": "Temas 4-6", "source_quote": "", "confidence": 0.9},
+            {"title": "Examen Parcial", "event_type": "exam", "date_iso": "2026-05-07", "week": 8,
+             "weight_percent": 25, "description": "Semanas 1-7", "source_quote": "", "confidence": 0.95},
+            {"title": "Práctica Calificada 3", "event_type": "quiz", "date_iso": "2026-05-28", "week": 11,
+             "weight_percent": 10, "description": "Temas 8-10", "source_quote": "", "confidence": 0.9},
+            {"title": "Trabajo de Investigación", "event_type": "assignment", "date_iso": "2026-06-18", "week": 14,
+             "weight_percent": 10, "description": "Entrega del paper", "source_quote": "", "confidence": 0.88},
+            {"title": "Práctica Calificada 4", "event_type": "quiz", "date_iso": "2026-06-25", "week": 15,
+             "weight_percent": 10, "description": "Temas 11-13", "source_quote": "", "confidence": 0.9},
+            {"title": "Examen Final", "event_type": "exam", "date_iso": "2026-07-02", "week": 16,
+             "weight_percent": 25, "description": "Semanas 9-15", "source_quote": "", "confidence": 0.95},
         ],
-        "warnings": ["La PC3 no tiene fecha explícita en el sílabo — requiere revisión manual."],
+        "warnings": [],
     },
 ]
 
@@ -458,7 +491,7 @@ with tab_upload:
 with tab_demo:
     st.markdown("### 🎯 Demo con datos de ejemplo")
     st.markdown(
-        "Carga 2 cursos simulados (**Data Science con Python** y **Econometría II**) "
+        "Carga 2 cursos simulados (**Data Science con Python** y **Organización Industrial**) "
         "para explorar todas las funciones sin necesidad de sílabos propios."
     )
     if st.button("▶️ Cargar datos de demo", type="primary", use_container_width=True):
@@ -535,13 +568,19 @@ elif st.session_state.events_df is not None:
 
     st.markdown("")
 
-    # ── Tabs: General + una por curso ─
+    # ── Tabs: General + Calendario + una por curso ─
     color_by_course = course_color_map(sorted(df["Curso"].unique().tolist()))
     course_keys = [c.get("course_name") or "Curso desconocido" for c in data]
 
-    tab_objs = st.tabs(["📊 General"] + [f"📚 {n}" for n in course_keys])
+    # Clases regulares (eventos "Clase") de todos los cursos para el calendario
+    class_events = []
+    for course in data:
+        class_events.extend(generate_class_events(course, cycle_start.isoformat(), cycle_end.isoformat()))
+    classes_df = pd.DataFrame(class_events) if class_events else pd.DataFrame(columns=["Curso", "Fecha", "Hora"])
 
-    # ===== Tab General =====
+    tab_objs = st.tabs(["📊 General", "📅 Calendario"] + [f"📚 {n}" for n in course_keys])
+
+    # ===== Tab General (carga académica) =====
     with tab_objs[0]:
         st.markdown("## Carga académica por semana")
         if not workload_df.empty:
@@ -591,16 +630,62 @@ elif st.session_state.events_df is not None:
         else:
             st.info("No hay suficientes datos de semanas para generar el gráfico de carga.")
 
-        st.divider()
-        st.markdown("## 📅 Calendario del ciclo")
+    # ===== Tab Calendario (vista de mes con navegación) =====
+    with tab_objs[1]:
+        st.markdown("## Calendario del ciclo")
         # Leyenda de colores por curso
         legend = " &nbsp; ".join(
             f"<span style='display:inline-block;width:11px;height:11px;border-radius:3px;"
             f"background:{color};margin-right:4px;'></span>{cur}"
             for cur, color in color_by_course.items()
         )
+        legend += (
+            " &nbsp; <span style='display:inline-block;width:11px;height:11px;border-radius:3px;"
+            "background:#eef2f7;border:1px solid #cbd5e1;margin-right:4px;'></span>Clase"
+        )
         st.markdown(f"<div style='font-size:12px;margin-bottom:6px;'>{legend}</div>", unsafe_allow_html=True)
-        render_month_calendar(df[df["Fecha"].notna()], color_by_course)
+
+        # Lista de meses del ciclo
+        months = []
+        yy, mm = cycle_start.year, cycle_start.month
+        while (yy, mm) <= (cycle_end.year, cycle_end.month):
+            months.append((yy, mm))
+            mm += 1
+            if mm > 12:
+                mm = 1
+                yy += 1
+        if "cal_idx" not in st.session_state:
+            st.session_state.cal_idx = 0
+        st.session_state.cal_idx = max(0, min(st.session_state.cal_idx, len(months) - 1))
+
+        cprev, cmid, cnext = st.columns([1, 4, 1])
+        if cprev.button("◀", use_container_width=True, disabled=st.session_state.cal_idx == 0):
+            st.session_state.cal_idx -= 1
+        if cnext.button("▶", use_container_width=True, disabled=st.session_state.cal_idx >= len(months) - 1):
+            st.session_state.cal_idx += 1
+        cur_y, cur_m = months[st.session_state.cal_idx]
+        cmid.markdown(
+            f"<div style='text-align:center;font-weight:800;font-size:1.25rem;text-transform:uppercase;'>"
+            f"{MONTH_ES[cur_m]} {cur_y}</div>",
+            unsafe_allow_html=True,
+        )
+
+        # Eventos y clases del mes seleccionado
+        dfd = df[df["Fecha"].notna()].copy()
+        dfd["_dt"] = pd.to_datetime(dfd["Fecha"])
+        evals_by_day = {}
+        for _, r in dfd[(dfd["_dt"].dt.year == cur_y) & (dfd["_dt"].dt.month == cur_m)].iterrows():
+            evals_by_day.setdefault(r["_dt"].day, []).append(r)
+
+        classes_by_day = {}
+        if not classes_df.empty:
+            cdf = classes_df.copy()
+            cdf["_dt"] = pd.to_datetime(cdf["Fecha"])
+            for _, r in cdf[(cdf["_dt"].dt.year == cur_y) & (cdf["_dt"].dt.month == cur_m)].iterrows():
+                classes_by_day.setdefault(r["_dt"].day, []).append(r)
+
+        st.markdown(_month_html(cur_y, cur_m, evals_by_day, classes_by_day, color_by_course),
+                    unsafe_allow_html=True)
 
         no_date = df[df["Fecha"].isna()]
         if not no_date.empty:
@@ -615,7 +700,7 @@ elif st.session_state.events_df is not None:
         df_ics = df[df["Fecha"].notna()].copy()
         if not df_ics.empty:
             st.download_button(
-                "⬇️ Descargar .ics (todos los cursos)",
+                "⬇️ Descargar .ics (todas las evaluaciones)",
                 data=generate_ics(df_ics),
                 file_name="cramly.ics",
                 mime="text/calendar",
@@ -631,7 +716,7 @@ elif st.session_state.events_df is not None:
     # ===== Tabs por curso =====
     for idx, course in enumerate(data):
         cname = course.get("course_name") or "Curso desconocido"
-        with tab_objs[idx + 1]:
+        with tab_objs[idx + 2]:
             course_df = df[df["Curso"] == cname].copy()
             prof = course.get("professor")
             st.markdown(f"### {cname}")
