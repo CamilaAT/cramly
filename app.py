@@ -421,12 +421,22 @@ with st.sidebar:
 # ─────────────────────────────────────
 # Header
 # ─────────────────────────────────────
-st.markdown('<div class="main-title">🎓 Cramly</div>', unsafe_allow_html=True)
 st.markdown(
-    '<div class="subtitle">Tu copiloto académico — sube tus sílabos, conoce tus fechas, notas y semanas críticas</div>',
+    """
+    <div style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+                padding: 1.7rem 1.9rem; border-radius: 16px; margin-bottom: 1.1rem;
+                box-shadow: 0 6px 18px rgba(79,70,229,0.28);">
+        <div style="font-size: 2.4rem; font-weight: 800; color: #ffffff;
+                    text-transform: uppercase; line-height: 1.05; letter-spacing: 0.5px;">
+            🎓 Cramly
+        </div>
+        <div style="font-size: 1.08rem; color: #e0e7ff; margin-top: 0.35rem;">
+            Tu copiloto académico — sube tus sílabos, conoce tus fechas, notas y semanas críticas
+        </div>
+    </div>
+    """,
     unsafe_allow_html=True,
 )
-st.markdown("")
 
 
 # ─────────────────────────────────────
