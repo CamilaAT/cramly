@@ -415,18 +415,22 @@ tab_upload, tab_demo = st.tabs(["📤 Subir mis sílabos", "🎯 Modo demo"])
 
 with tab_upload:
     uploaded_files = st.file_uploader(
-        "Sube tus sílabos en PDF (máximo 5 archivos)",
+        "Sube tus sílabos en PDF (hasta 8 archivos)",
         type=["pdf"],
         accept_multiple_files=True,
         help="PDFs con texto seleccionable dan mejor resultado. PDFs escaneados pueden tener menor precisión.",
     )
 
     if uploaded_files:
-        if len(uploaded_files) > 5:
-            st.warning("⚠️ Máximo 5 sílabos. Se procesarán los primeros 5.")
-            uploaded_files = uploaded_files[:5]
+        if len(uploaded_files) > 8:
+            st.warning("⚠️ Máximo 8 archivos. Se procesarán los primeros 8.")
+            uploaded_files = uploaded_files[:8]
 
         st.success(f"✅ {len(uploaded_files)} archivo(s) listo(s)")
+        st.info(
+            "💡 ¿Tu curso tiene **varios PDFs** (sílabo base + un complemento con las fechas exactas)? "
+            "Ponles el **mismo nombre de curso** y Cramly los combinará en uno solo."
+        )
 
         course_names = []
         for i, f in enumerate(uploaded_files):
@@ -438,6 +442,16 @@ with tab_upload:
             )
             course_names.append(name)
 
+        # Agrupar PDFs por nombre de curso (mismo nombre → mismo curso)
+        groups = {}
+        for f, cname in zip(uploaded_files, course_names):
+            key = (cname or f.name).strip()
+            groups.setdefault(key, []).append(f)
+
+        if len(groups) < len(uploaded_files):
+            merged = [f"**{c}** ({len(fs)} PDFs)" for c, fs in groups.items() if len(fs) > 1]
+            st.caption("🔗 Se combinarán: " + " · ".join(merged))
+
         if st.button("🚀 Procesar sílabos con IA", type="primary", use_container_width=True):
             if not os.getenv("ANTHROPIC_API_KEY"):
                 st.error("❌ Agrega tu API key de Anthropic en el panel lateral.")
@@ -445,31 +459,34 @@ with tab_upload:
                 results = []
                 progress_bar = st.progress(0)
                 status = st.empty()
+                total_groups = len(groups)
 
-                for i, (f, cname) in enumerate(zip(uploaded_files, course_names)):
-                    base = i / len(uploaded_files)
-
+                for i, (cname, files) in enumerate(groups.items()):
                     status.info(f"🤖 Analizando **{cname}** con Claude (lectura directa del PDF)...")
-                    progress_bar.progress(base + 0.4 / len(uploaded_files))
+                    progress_bar.progress(i / total_groups + 0.4 / total_groups)
 
-                    f.seek(0)
-                    pdf_bytes = f.read()
+                    pdfs = []
+                    for f in files:
+                        f.seek(0)
+                        b = f.read()
+                        if b:
+                            pdfs.append(b)
 
-                    if not pdf_bytes:
-                        st.warning(f"⚠️ No se pudo leer '{f.name}'. Se omite.")
+                    if not pdfs:
+                        st.warning(f"⚠️ No se pudo leer ningún PDF de '{cname}'. Se omite.")
                         continue
 
-                    # Claude lee el PDF de forma nativa (preserva tablas de cronograma y notas).
-                    # Si el PDF fallara, hace fallback a texto extraído con pdfplumber.
+                    # Claude lee el/los PDF(s) de forma nativa (preserva tablas).
+                    # Varios PDFs con el mismo curso se combinan en una sola extracción.
                     data = extract_syllabus_data(
-                        pdf_bytes=pdf_bytes,
+                        pdf_bytes=pdfs,
                         course_name=cname,
                         cycle_start=cycle_start.isoformat(),
                     )
 
                     if data.get("error"):
                         status.info(f"↩️ Reintentando **{cname}** con extracción de texto...")
-                        fallback_text = extract_text_from_pdf(f)
+                        fallback_text = "\n\n".join(extract_text_from_pdf(f) for f in files)
                         data = extract_syllabus_data(
                             text=fallback_text,
                             course_name=cname,
@@ -480,7 +497,7 @@ with tab_upload:
                         st.error(f"⚠️ Error en {cname}: {data['error']}")
 
                     results.append(data)
-                    progress_bar.progress((i + 1) / len(uploaded_files))
+                    progress_bar.progress((i + 1) / total_groups)
 
                 status.success("✅ ¡Procesamiento completado!")
                 results = normalize_all_courses(results, cycle_start.isoformat())

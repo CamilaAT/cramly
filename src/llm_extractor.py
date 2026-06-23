@@ -123,11 +123,16 @@ REGLAS CRÍTICAS:
     y Jueves, 17:30 - 19:30 hs"), llena class_schedule con los días EN ESPAÑOL en minúscula
     (ej: ["martes","jueves"]) y las horas en formato HH:MM (start_time, end_time). Si no hay
     un horario regular claro, deja class_schedule en null.
+12. VARIOS DOCUMENTOS: si se adjunta más de un PDF, TODOS pertenecen al MISMO curso (ej: el
+    sílabo base + un documento complementario con las fechas exactas de las evaluaciones).
+    Combina toda la información en una sola extracción. Ante un conflicto (ej: el sílabo dice
+    "semana 8" y el complemento da una fecha exacta), prioriza el dato MÁS específico/reciente
+    y combina los detalles (fecha exacta + peso + descripción).
 """
 
 
 def extract_syllabus_data(
-    pdf_bytes: bytes = None,
+    pdf_bytes=None,
     text: str = None,
     course_name: str = None,
     cycle_start: str = "2026-03-17",
@@ -135,7 +140,9 @@ def extract_syllabus_data(
     """
     Envía el sílabo a Claude y devuelve un dict estructurado.
 
-    Preferentemente recibe `pdf_bytes` (el PDF crudo) y lo manda como document block.
+    `pdf_bytes` puede ser:
+      - los bytes de UN PDF, o
+      - una LISTA de bytes (varios PDFs del mismo curso: sílabo base + complementos).
     Si solo hay `text`, usa la ruta de texto plano como fallback.
     En caso de error devuelve un dict con 'error' y listas vacías.
     """
@@ -153,16 +160,24 @@ def extract_syllabus_data(
         course_name=course_name or "No especificado",
     )
 
-    # Construir el contenido del mensaje: PDF nativo (preferido) o texto (fallback).
+    # Construir el contenido del mensaje: PDF(s) nativo(s) (preferido) o texto (fallback).
     if pdf_bytes:
-        b64 = base64.standard_b64encode(pdf_bytes).decode("utf-8")
-        user_content = [
-            {
+        pdf_list = pdf_bytes if isinstance(pdf_bytes, (list, tuple)) else [pdf_bytes]
+        user_content = []
+        for pb in pdf_list:
+            if not pb:
+                continue
+            b64 = base64.standard_b64encode(pb).decode("utf-8")
+            user_content.append({
                 "type": "document",
                 "source": {"type": "base64", "media_type": "application/pdf", "data": b64},
-            },
-            {"type": "text", "text": prompt},
-        ]
+            })
+        if len(user_content) > 1:
+            prompt = (
+                f"Se adjuntan {len(user_content)} PDFs del MISMO curso "
+                "(combínalos en una sola extracción, ver regla 12).\n\n" + prompt
+            )
+        user_content.append({"type": "text", "text": prompt})
     else:
         truncated = truncate_text(text, max_chars=12000)
         user_content = prompt + "\n\nTexto del sílabo:\n" + truncated
