@@ -178,27 +178,58 @@ def _month_html(year: int, month: int, evals_by_day: dict, classes_by_day: dict,
     )
 
 
+def _schedule_sessions(sched: dict) -> list:
+    """
+    Normaliza el horario a una lista de sesiones {weekday, start_time, end_time}.
+    Soporta el formato nuevo (sessions con hora por día) y el viejo (days + un solo horario).
+    """
+    if not sched:
+        return []
+    out = []
+    if sched.get("sessions"):
+        for s in sched["sessions"]:
+            day = (s.get("day") or "").lower().strip()
+            if day in DIA_A_WEEKDAY:
+                out.append({
+                    "weekday": DIA_A_WEEKDAY[day],
+                    "start_time": s.get("start_time"),
+                    "end_time": s.get("end_time"),
+                })
+    elif sched.get("days"):
+        for d in sched["days"]:
+            day = (d or "").lower().strip()
+            if day in DIA_A_WEEKDAY:
+                out.append({
+                    "weekday": DIA_A_WEEKDAY[day],
+                    "start_time": sched.get("start_time"),
+                    "end_time": sched.get("end_time"),
+                })
+    return out
+
+
 def generate_class_events(course: dict, cycle_start_str: str, cycle_end_str: str) -> list:
     """Genera las clases semanales (eventos 'Clase') del curso entre inicio y fin del ciclo."""
-    sched = course.get("class_schedule") or {}
-    days = sched.get("days") or []
-    weekdays = {DIA_A_WEEKDAY[d.lower().strip()] for d in days if d.lower().strip() in DIA_A_WEEKDAY}
-    if not weekdays:
+    sessions = _schedule_sessions(course.get("class_schedule") or {})
+    if not sessions:
         return []
     try:
         start = datetime.strptime(cycle_start_str, "%Y-%m-%d").date()
         end = datetime.strptime(cycle_end_str, "%Y-%m-%d").date()
     except Exception:
         return []
-    hora = ""
-    if sched.get("start_time") or sched.get("end_time"):
-        hora = f"{sched.get('start_time', '')}-{sched.get('end_time', '')}".strip("-")
+    by_weekday = {s["weekday"]: s for s in sessions}
     cname = course.get("course_name") or "Curso desconocido"
     out = []
     d = start
     while d <= end:
-        if d.weekday() in weekdays:
-            out.append({"Curso": cname, "Fecha": d.isoformat(), "Hora": hora})
+        s = by_weekday.get(d.weekday())
+        if s:
+            st, et = s.get("start_time"), s.get("end_time")
+            hora = f"{st or ''}-{et or ''}".strip("-") if (st or et) else ""
+            out.append({
+                "Curso": cname, "Fecha": d.isoformat(),
+                "start_time": st, "end_time": et, "Hora": hora,
+            })
         d += timedelta(days=1)
     return out
 
@@ -240,7 +271,10 @@ DEMO_DATA = [
         "course_name": "Data Science con Python",
         "professor": "Alexander Quispe",
         "institution": "Universidad del Pacífico",
-        "class_schedule": {"days": ["lunes", "miércoles"], "start_time": "19:00", "end_time": "21:00"},
+        "class_schedule": {"sessions": [
+            {"day": "lunes", "start_time": "19:00", "end_time": "21:00"},
+            {"day": "miércoles", "start_time": "19:00", "end_time": "21:00"},
+        ]},
         "grading_policy": [
             {"component": "Tarea 1", "weight_percent": 10, "description": "Pandas y limpieza de datos"},
             {"component": "Tarea 2", "weight_percent": 10, "description": "Visualización"},
@@ -272,7 +306,10 @@ DEMO_DATA = [
         "course_name": "Organización Industrial",
         "professor": "Julio Aguirre",
         "institution": "Universidad del Pacífico",
-        "class_schedule": {"days": ["martes", "jueves"], "start_time": "17:30", "end_time": "19:30"},
+        "class_schedule": {"sessions": [
+            {"day": "martes", "start_time": "17:30", "end_time": "19:30"},
+            {"day": "jueves", "start_time": "17:30", "end_time": "19:30"},
+        ]},
         "grading_policy": [
             {"component": "Examen Parcial", "weight_percent": 25, "description": "Semanas 1-7"},
             {"component": "Examen Final", "weight_percent": 25, "description": "Semanas 9-15"},
@@ -749,20 +786,25 @@ elif st.session_state.events_df is not None:
         st.divider()
         st.markdown("## 📆 Exportar a Google Calendar")
         df_ics = df[df["Fecha"].notna()].copy()
-        if not df_ics.empty:
+        if not df_ics.empty or class_events:
+            incluir_clases = st.checkbox(
+                "Incluir clases regulares (con su hora)", value=True,
+                help="Agrega al .ics tus clases semanales con su horario, además de las evaluaciones.",
+            )
             st.download_button(
-                "⬇️ Descargar .ics (todas las evaluaciones)",
-                data=generate_ics(df_ics),
+                "⬇️ Descargar .ics (evaluaciones" + (" + clases)" if incluir_clases else ")"),
+                data=generate_ics(df_ics, class_events=class_events if incluir_clases else None),
                 file_name="cramly.ics",
                 mime="text/calendar",
                 use_container_width=True,
             )
             st.caption(
                 "Impórtalo en Google Calendar: Configuración → Importar y exportar → Importar. "
+                "Las clases se agregan con su hora; las evaluaciones como eventos de día completo. "
                 "(También funciona en Apple Calendar y Outlook.)"
             )
         else:
-            st.info("No hay evaluaciones con fecha exacta para exportar todavía.")
+            st.info("No hay evaluaciones ni clases con fecha para exportar todavía.")
 
     # ===== Tabs por curso =====
     for idx, course in enumerate(data):
