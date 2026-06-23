@@ -55,6 +55,41 @@ Cramly convierte ese PDF pasivo en un sistema vivo de planificación académica.
 
 ---
 
+## 🏗 Arquitectura
+
+```mermaid
+flowchart TD
+    U(["🧑‍🎓 Estudiante"]) -->|sube sílabos en PDF| APP["app.py · Streamlit UI"]
+
+    APP -->|bytes del PDF| LLM["llm_extractor.py"]
+    LLM -->|"document block + structured outputs"| API{{"Claude Sonnet 4.6<br/>(Anthropic API)"}}
+    API -->|"JSON validado: cursos, pesos, eventos, warnings"| LLM
+    LLM -.->|fallback si el PDF falla| PDF["pdf_extractor.py · pdfplumber"]
+    PDF -.-> LLM
+
+    LLM -->|cursos + eventos| NORM["date_normalizer.py<br/>normaliza fechas · semana → fecha"]
+    NORM --> WL["workload.py<br/>score de carga · semanas críticas"]
+    WL --> DASH["Dashboard<br/>tabla · gráficos Plotly · calendario"]
+    DASH --> EXP["Exportar<br/>calendar_exporter.py (.ics) · CSV · Markdown"]
+    EXP --> U
+
+    subgraph CLOUD ["☁️ Streamlit Community Cloud"]
+        APP
+        LLM
+        PDF
+        NORM
+        WL
+        DASH
+        EXP
+    end
+```
+
+**Flujo en una línea:** el estudiante sube sus sílabos en PDF → Claude los lee de forma nativa (preservando las tablas de cronograma y notas) y devuelve JSON estructurado → se normalizan fechas y se calcula la carga académica → se muestra el dashboard y se exporta a `.ics`/CSV.
+
+> La API key vive en **Streamlit Secrets** (nunca en el repo). El **Modo demo** no llama a la API.
+
+---
+
 ## 📁 Estructura del repositorio
 
 ```
@@ -79,7 +114,7 @@ cramly/
 │   │   └── interviews.md   # Entrevistas de validación
 │   ├── screenshots/
 │   ├── pitch_deck.pdf      # (pendiente)
-│   └── architecture.png    # (pendiente)
+│   └── architecture.png    # (opcional — el diagrama vive en el README)
 └── tests/
     └── test_date_normalizer.py
 ```
