@@ -37,7 +37,14 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    .main-title  { font-size: 2.4rem; font-weight: 800; color: #1e293b; line-height: 1.1; }
+    /* Tipografía Arial en toda la app */
+    html, body, [class*="css"], .stApp, .main, button, input, textarea, select {
+        font-family: Arial, "Helvetica Neue", Helvetica, sans-serif !important;
+    }
+    /* Títulos en mayúscula y negrita */
+    h1, h2, h3, h4 { text-transform: uppercase; font-weight: 800 !important; letter-spacing: 0.01em; }
+    .main-title  { font-size: 2.4rem; font-weight: 800; color: #1e293b; line-height: 1.1;
+                   text-transform: uppercase; }
     .subtitle    { font-size: 1.05rem; color: #64748b; margin-top: 0.2rem; }
     .critical-week { background:#fef2f2; border-left:4px solid #ef4444;
                      padding:0.75rem 1rem; border-radius:0 8px 8px 0; margin:0.4rem 0; }
@@ -47,6 +54,25 @@ st.markdown("""
                      padding:0.75rem 1rem; border-radius:0 8px 8px 0; margin:0.4rem 0; }
 </style>
 """, unsafe_allow_html=True)
+
+
+# ─────────────────────────────────────
+# Etiquetas de tipo de evaluación en español
+# ─────────────────────────────────────
+TIPO_ES = {
+    "exam": "Examen",
+    "assignment": "Trabajo / Entrega",
+    "presentation": "Exposición",
+    "quiz": "Control / Quiz",
+    "project": "Proyecto",
+    "reading": "Lectura",
+    "other": "Otro",
+    "class": "Clase",
+}
+
+
+def tipo_es(value: str) -> str:
+    return TIPO_ES.get(value, (value or "Otro").capitalize())
 
 
 # ─────────────────────────────────────
@@ -160,7 +186,7 @@ def flatten_events(course_data_list: list) -> pd.DataFrame:
             rows.append({
                 "Curso": course_name,
                 "Evaluación": event.get("title", ""),
-                "Tipo": event.get("event_type", "other"),
+                "Tipo": tipo_es(event.get("event_type", "other")),
                 "Fecha": event.get("date_iso"),
                 "Semana": event.get("week"),
                 "Peso (%)": event.get("weight_percent"),
@@ -398,11 +424,10 @@ elif st.session_state.events_df is not None:
     st.markdown("")
 
     # ── Tabs de resultados ───────────
-    rt1, rt2, rt3, rt4 = st.tabs([
+    rt1, rt2, rt3 = st.tabs([
         "📋 Evaluaciones",
         "📈 Carga académica",
         "📅 Calendario",
-        "📤 Exportar",
     ])
 
     # ── Tab 1: Tabla ─────────────────
@@ -433,9 +458,6 @@ elif st.session_state.events_df is not None:
         styled = display[cols_show].style.map(color_weight, subset=["Peso (%)"])
         st.dataframe(styled, use_container_width=True, height=420)
 
-        csv = display.to_csv(index=False, encoding="utf-8-sig")
-        st.download_button("⬇️ Descargar CSV", csv, "evaluaciones.csv", "text/csv")
-
     # ── Tab 2: Carga académica ────────
     with rt2:
         st.markdown("### Carga académica por semana")
@@ -459,42 +481,38 @@ elif st.session_state.events_df is not None:
             fig.update_layout(
                 plot_bgcolor="rgba(0,0,0,0)",
                 paper_bgcolor="rgba(0,0,0,0)",
-                font_family="Inter, sans-serif",
+                font_family="Arial, sans-serif",
             )
+            # Mostrar TODAS las semanas en el eje X (sin saltarse números)
+            fig.update_xaxes(dtick=1, tickmode="linear")
             fig.update_traces(textposition="outside")
             st.plotly_chart(fig, use_container_width=True)
 
-            # Semanas críticas
-            critical_weeks = get_critical_weeks_summary(df, workload_df)
-            if critical_weeks:
-                st.markdown("### 🚨 Semanas críticas")
-                for cw in critical_weeks:
-                    evals_str = " · ".join(cw["evaluaciones"])
-                    st.markdown(
-                        f'<div class="critical-week"><strong>Semana {cw["semana"]}</strong> '
-                        f'— Score {cw["score"]} | Peso acumulado: {cw["peso_total"]}% <br>'
-                        f'<small>{evals_str}</small></div>',
-                        unsafe_allow_html=True,
-                    )
-
-            # Gráficos secundarios
-            col_a, col_b = st.columns(2)
-            with col_a:
-                type_counts = df["Tipo"].value_counts()
-                fig2 = px.pie(
-                    values=type_counts.values,
-                    names=type_counts.index,
-                    title="Evaluaciones por tipo",
+            # Detalle de carga por semana: qué evaluaciones la causan
+            st.markdown("### 🔎 Detalle por semana")
+            for _, wrow in workload_df.sort_values("Semana").iterrows():
+                semana = int(wrow["Semana"])
+                nivel = wrow["Nivel"]
+                week_events = df[pd.to_numeric(df["Semana"], errors="coerce") == semana]
+                evals = week_events[["Evaluación", "Curso", "Peso (%)"]].to_dict("records")
+                detalle = " · ".join(
+                    f"{e['Evaluación']} ({e['Curso']}"
+                    + (f", {int(e['Peso (%)'])}%" if pd.notna(e['Peso (%)']) else "")
+                    + ")"
+                    for e in evals
+                ) or "Sin evaluaciones"
+                css = "critical-week" if "Alta" in nivel else "warning-week" if "Media" in nivel else "ok-week"
+                st.markdown(
+                    f'<div class="{css}"><strong>Semana {semana}</strong> — {nivel} '
+                    f'(score {int(wrow["Score"])}, peso acumulado {int(wrow["Peso_total"])}%)<br>'
+                    f'<small>{detalle}</small></div>',
+                    unsafe_allow_html=True,
                 )
-                st.plotly_chart(fig2, use_container_width=True)
-
-            with col_b:
-                wpc = df.groupby("Curso")["Peso (%)"].sum().reset_index()
-                fig3 = px.bar(
-                    wpc, x="Curso", y="Peso (%)", title="Peso total detectado por curso", color="Curso"
-                )
-                fig3.update_layout(showlegend=False)
-                st.plotly_chart(fig3, use_container_width=True)
+            st.caption(
+                "El **score de carga** combina el número de evaluaciones de la semana (×10) "
+                "más la suma de sus pesos. Mientras más evaluaciones pesadas caen en una misma "
+                "semana, más alta la carga. 🔴 Alta · 🟡 Media · 🟢 Baja."
+            )
         else:
             st.info("No hay suficientes datos de semanas para generar el gráfico de carga.")
 
@@ -531,61 +549,23 @@ elif st.session_state.events_df is not None:
                     use_container_width=True,
                 )
 
-    # ── Tab 4: Exportar ───────────────
-    with rt4:
-        st.markdown("### 📤 Exportar tus datos")
-
-        col_x, col_y = st.columns(2)
-
-        with col_x:
-            st.markdown("#### 📆 Google Calendar (.ics)")
-            df_ics = df[df["Fecha"].notna()].copy()
-            if not df_ics.empty:
-                ics_bytes = generate_ics(df_ics)
-                st.download_button(
-                    "⬇️ Descargar .ics",
-                    data=ics_bytes,
-                    file_name="cramly.ics",
-                    mime="text/calendar",
-                    use_container_width=True,
-                )
-                st.caption(
-                    "Importa este archivo en Google Calendar: "
-                    "Configuración → Importar y exportar → Importar."
-                )
-            else:
-                st.warning("No hay evaluaciones con fecha exacta para exportar al calendario.")
-
-        with col_y:
-            st.markdown("#### 📊 Tabla completa (.csv)")
-            csv_full = df.to_csv(index=False, encoding="utf-8-sig")
+        # Exportar a Google Calendar (.ics) — dentro del mismo tab de Calendario
+        st.divider()
+        st.markdown("### 📆 Exportar a Google Calendar")
+        df_ics = df[df["Fecha"].notna()].copy()
+        if not df_ics.empty:
+            ics_bytes = generate_ics(df_ics)
             st.download_button(
-                "⬇️ Descargar CSV completo",
-                data=csv_full,
-                file_name="cramly_completo.csv",
-                mime="text/csv",
+                "⬇️ Descargar .ics",
+                data=ics_bytes,
+                file_name="cramly.ics",
+                mime="text/calendar",
                 use_container_width=True,
             )
-
-        st.divider()
-        st.markdown("#### 📋 Resumen en Markdown")
-        summary_md = f"# Resumen — Cramly\n\n"
-        summary_md += f"**Generado:** {datetime.now().strftime('%d/%m/%Y %H:%M')}  \n"
-        summary_md += f"**Universidad:** {university}  \n"
-        summary_md += f"**Ciclo:** {cycle_start} → {cycle_end}\n\n"
-        summary_md += f"## Cursos procesados: {total_courses}\n\n"
-        for course in data:
-            summary_md += f"### {course.get('course_name', 'Curso')}\n"
-            summary_md += f"- Docente: {course.get('professor') or 'No detectado'}\n"
-            summary_md += f"- Evaluaciones detectadas: {len(course.get('events', []))}\n"
-            for gp in course.get("grading_policy", []):
-                summary_md += f"  - {gp['component']}: {gp.get('weight_percent', '?')}%\n"
-            summary_md += "\n"
-
-        st.download_button(
-            "⬇️ Descargar resumen (.md)",
-            data=summary_md,
-            file_name="cramly_resumen.md",
-            mime="text/markdown",
-            use_container_width=True,
-        )
+            st.caption(
+                "Importa este archivo en Google Calendar: "
+                "Configuración → Importar y exportar → Importar. "
+                "(También funciona en Apple Calendar y Outlook.)"
+            )
+        else:
+            st.info("No hay evaluaciones con fecha exacta para exportar todavía.")
