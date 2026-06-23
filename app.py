@@ -393,16 +393,19 @@ with st.sidebar:
 
     _server_key = configured_api_key()
     if _server_key:
-        # Hay key configurada (servidor): cárgala al entorno para el extractor,
-        # sin mostrarla. El campo queda vacío como override opcional.
+        # Hay key configurada (Secrets/.env): se carga al entorno SIN mostrarla.
+        # El override queda escondido en un expander para no recargar el panel.
         os.environ["ANTHROPIC_API_KEY"] = _server_key
-        st.success("✅ API key configurada")
-        api_key_input = st.text_input(
-            "🔑 Usar otra API Key (opcional)",
-            type="password",
-            value="",
-            help="Ya hay una key configurada. Deja vacío para usarla, o pega otra para sobrescribir.",
-        )
+        with st.expander("🔑 API key (opcional)", expanded=False):
+            other = st.text_input(
+                "Usar otra API key",
+                type="password",
+                value="",
+                label_visibility="collapsed",
+                help="Ya hay una key configurada. Pega otra solo si quieres sobrescribirla.",
+            )
+            if other:
+                os.environ["ANTHROPIC_API_KEY"] = other.strip()
     else:
         api_key_input = st.text_input(
             "🔑 API Key de Anthropic",
@@ -410,8 +413,8 @@ with st.sidebar:
             value="",
             help="Pega tu key de console.anthropic.com. En local puedes ponerla en un archivo .env.",
         )
-    if api_key_input:
-        os.environ["ANTHROPIC_API_KEY"] = api_key_input.strip()
+        if api_key_input:
+            os.environ["ANTHROPIC_API_KEY"] = api_key_input.strip()
 
     st.divider()
     st.markdown("**Cramly** usa Claude AI para extraer automáticamente evaluaciones, fechas y pesos de tus sílabos en PDF.")
