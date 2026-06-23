@@ -53,6 +53,26 @@ st.markdown("""
                      padding:0.75rem 1rem; border-radius:0 8px 8px 0; margin:0.4rem 0; }
     .ok-week       { background:#f0fdf4; border-left:4px solid #22c55e;
                      padding:0.75rem 1rem; border-radius:0 8px 8px 0; margin:0.4rem 0; }
+
+    /* Ocultar menú y footer por defecto de Streamlit (look más limpio) */
+    #MainMenu { visibility: hidden; }
+    footer { visibility: hidden; }
+
+    /* Tarjetas de métricas */
+    [data-testid="stMetric"] {
+        background: #f8fafc; border: 1px solid #e2e8f0;
+        border-radius: 10px; padding: 12px 14px;
+    }
+    [data-testid="stMetricValue"] { font-size: 1.3rem; }
+
+    /* Tabs más marcadas */
+    .stTabs [data-baseweb="tab-list"] { gap: 6px; }
+    .stTabs [data-baseweb="tab"] { font-weight: 700; }
+
+    /* Botones redondeados */
+    .stButton > button, .stDownloadButton > button {
+        border-radius: 8px; font-weight: 700;
+    }
 </style>
 """, unsafe_allow_html=True)
 
